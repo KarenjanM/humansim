@@ -237,7 +237,7 @@ Re-seating moves every live agent that follows the defaults onto the current loc
 - `set_elevator_doors` - open or close cabin doors by name, an unknown name rejects the call
 - `teleport_agents` - move agents to new poses with zero velocity, ending the ride of a rider. An unknown id rejects the call and moves no one
 - `set_flow` — bulk configure sources, sinks, walls
-- `notify_stimulus` - drive a need on one agent (or `-1` for all) after its reaction time
+- `notify_stimulus` - drive a need on one agent (or `-1` for all) after its reaction time, a broadcast level also seeds agents spawned later
 - `reset` - clear all simulation state, or with `soft: true` keep it and only apply stored params, re-seat agents, and prune unused planners
 
 ## Development

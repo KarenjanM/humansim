@@ -519,6 +519,7 @@ class AgentManager(Node):
         self._subsystem_epoch_ns: int = 0
         self._pending_scenario_spawns: deque[tuple[int, AgentStateMsg]] = deque()
         self._pending_stimuli: deque[tuple[int, int, str, float]] = deque()
+        self._stimulus_levels: dict[str, float] = {}
         self._meta_dirty = True
         self._meta_published: tuple | None = None
         self._gestures_dirty = True
@@ -1327,7 +1328,15 @@ class AgentManager(Node):
         hits = [a for n, a in candidates.items() if n.rsplit("/", 1)[-1] == name]
         return hits[0] if len(hits) == 1 else None
 
+    def _apply_stimulus_levels(self, agent: BaseAgent) -> None:
+        """Start a new agent's needs from the current broadcast stimulus levels."""
+        if agent.needs is None:
+            return
+        for stimulus, intensity in self._stimulus_levels.items():
+            agent.needs.set(stimulus, 100.0 * intensity)
+
     def _compile_behavior_tree(self, agent: BaseAgent) -> None:
+        self._apply_stimulus_levels(agent)
         aid = agent.state.agent_id
         type_name = agent.params.name
         agent_type = resolve_agent_type_name(type_name, self._agent_types)
@@ -1458,7 +1467,8 @@ class AgentManager(Node):
                 continue
             if agent.needs is not None:
                 agent.needs.set(stimulus, 100.0 * intensity)
-            self._event_bus.fire(stimulus, agent_id)
+            if intensity > 0.0:
+                self._event_bus.fire(stimulus, agent_id)
 
         t0 = time.perf_counter()
         spawn_requests = self._spawn_scheduler.tick(self._tick_count, self._dt)
@@ -2816,6 +2826,7 @@ class AgentManager(Node):
         self._interaction_manager.reset()
         self._event_bus.clear()
         self._pending_stimuli.clear()
+        self._stimulus_levels.clear()
         self._event_scripts.clear()
         self._event_scripts_by_tick.clear()
         self._interaction_scripts.clear()
@@ -2999,6 +3010,8 @@ class AgentManager(Node):
             response.message = f"unknown agent id {request.agent_id}"
             return response
 
+        if request.agent_id == -1:
+            self._stimulus_levels[request.stimulus] = float(request.intensity)
         for aid in targets:
             agent = self._agents[aid]
             due_tick = self._tick_count + int(round(agent.params.reaction_time / self._dt))
@@ -3007,7 +3020,7 @@ class AgentManager(Node):
 
         response.success = True
         response.message = f"queued {request.stimulus} for {len(targets)} agent(s)"
-        self._logger.info(response.message)
+        self._logger.debug(response.message)
         return response
 
     def _add_source_callback(self, request: AddSource.Request, response: AddSource.Response) -> AddSource.Response:

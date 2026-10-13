@@ -65,6 +65,8 @@ def _resolve_kernel(
                 hit = False
                 cx = 0.0
                 cy = 0.0
+                prev_ids = np.empty(0, dtype=np.int64)
+                prev_depths = np.empty(0)
                 for end in range(2):
                     sign = 2.0 * end - 1.0
                     px = x + sign * ox
@@ -73,16 +75,30 @@ def _resolve_kernel(
                     if k > buf.shape[0]:
                         buf = np.empty(k, dtype=np.int64)
                         k = query_walls(cell_start, cell_walls, wall_cx0, wall_cy0, origin_x, origin_y, cell, nx, ny, px, py, threshold, buf)
+                    ids = np.empty(k, dtype=np.int64)
+                    depths = np.empty(k)
+                    n = 0
                     for c in range(k):
                         dist, ux, uy = _contact(segments, buf[c], px, py)
                         if dist < threshold - 1e-9:
                             hit = True
-                            cx += ux * (threshold - dist)
-                            cy += uy * (threshold - dist)
+                            depth = threshold - dist
+                            push = depth
+                            for j in range(prev_ids.shape[0]):
+                                if prev_ids[j] == buf[c]:
+                                    push = max(depth - prev_depths[j], 0.0)
+                                    break
+                            cx += ux * push
+                            cy += uy * push
+                            ids[n] = buf[c]
+                            depths[n] = depth
+                            n += 1
                             proj = vx * ux + vy * uy
                             if proj < 0:
                                 vx -= proj * ux
                                 vy -= proj * uy
+                    prev_ids = ids[:n]
+                    prev_depths = depths[:n]
                 if not hit:
                     break
                 corrected[i] = True

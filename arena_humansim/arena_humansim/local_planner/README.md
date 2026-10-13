@@ -35,7 +35,7 @@ class LocalPlanner(WallAware, Loggable, ABC):
     def compute_pool(self, pool, store_forces=False, dt=1.0) -> None: ...
 ```
 
-`LocalPlanner` inherits `PoolAware` (no-op `attach` + four lifecycle hooks); planners that need pool-aligned SoA override those.
+`LocalPlanner` inherits `PoolAware` (no-op `attach` + five lifecycle hooks); planners that need pool-aligned SoA override those.
 
 - `compute` is the per-agent fallback and is always required.
 - When `supports_pool=True`, `AgentManager` calls `compute_pool` with the whole `AgentPool` and the planner writes back into `pool.vel` directly. Hot path; prefer it past ~50 agents.
@@ -54,11 +54,12 @@ def attach(self, pool):
 
 def on_pool_grow(self, new_capacity, old_capacity): ...   # resize
 def on_pool_add(self, idx, agent): ...                    # populate from agent.params.local_planner_params[...]
+def on_pool_update(self, idx, agent): ...                 # params changed in place (a sequence tune); re-read them, default no-op
 def on_pool_swap(self, idx, last): ...                    # swap_remove copy [last] -> [idx]
 def on_pool_reset(self): ...                              # usually no-op; n=0 makes slots inert
 ```
 
-`AgentPool` dispatches the four hooks from its lifecycle chokepoints. Registration must happen before any agents are added.
+`AgentPool` dispatches the hooks from its lifecycle chokepoints. SFM, HSFM and the `ForcePlanner` models answer `on_pool_update` by re-running `on_pool_add`; a planner that caches per-agent params must do the same or a tune never reaches it. Registration must happen before any agents are added.
 
 ## Adding a planner
 

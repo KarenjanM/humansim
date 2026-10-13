@@ -13,10 +13,12 @@ from arena_humansim.core.behavior.nodes.interaction import BlockNode, CancelNode
 from arena_humansim.core.behavior.nodes.navigation import GoToNode, ResolveObjectNode
 from arena_humansim.core.behavior.nodes.primitives import (
     ClearOutcomeNode,
+    ConditionalTunesNode,
     HoldNode,
     NeedsDecayNode,
     PatienceWatchdogNode,
     SatisfyNode,
+    TuneNode,
 )
 from arena_humansim.core.behavior.nodes.state_machine import SequenceStateMachine
 from arena_humansim.core.behavior.nodes.utility import check_condition, preconditions_met, score_actions
@@ -27,6 +29,7 @@ __all__ = [
     "BlockNode",
     "CancelNode",
     "ClearOutcomeNode",
+    "ConditionalTunesNode",
     "GoToNode",
     "HoldNode",
     "NeedsDecayNode",
@@ -37,6 +40,7 @@ __all__ = [
     "SeekNode",
     "SequenceRiderNode",
     "SequenceStateMachine",
+    "TuneNode",
     "_at_target",
     "_bt_logger",
     "_cancel_command",

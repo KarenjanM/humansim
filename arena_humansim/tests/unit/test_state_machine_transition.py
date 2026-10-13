@@ -8,7 +8,7 @@ import pytest
 pytest.importorskip("rclpy")
 
 import py_trees
-
+from arena_humansim.core.agents import Tunes
 from arena_humansim.core.agents.types import NeedCondition, SequenceDef, TransitionDef
 from arena_humansim.core.behavior.nodes import SequenceStateMachine
 from arena_humansim.core.interaction_kinds import InteractionType
@@ -19,8 +19,8 @@ from arena_humansim.utils.types import (
     AgentState,
     BehaviorTreeMovement,
     InteractionOutcome,
-    NeedState,
     NeedsState,
+    NeedState,
     Pose2D,
     SeekSpec,
 )
@@ -38,6 +38,7 @@ class _FakeAgent:
         self.params = _FakeParams()
         self.movement = BehaviorTreeMovement()
         self.needs: NeedsState | None = None
+        self.tunes = Tunes()
 
 
 def _mk_mgr(agents: dict[int, Any]) -> InteractionManager:

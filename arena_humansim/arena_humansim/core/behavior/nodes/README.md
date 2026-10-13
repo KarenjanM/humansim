@@ -8,12 +8,12 @@ Composable `py_trees.Behaviour` primitives the compiler assembles into per-agent
 |---|---|
 | `helpers.py` | `_nav_command`, `_seek_command`, `_cancel_command`, `_at_target`, `_resolve_interaction_radius`, `_sample_param_dist`, `_bt_logger`. |
 | `utility.py` | Utility scoring: `check_condition`, `preconditions_met`, `score_actions`. |
-| `primitives.py` | Leaf nodes that don't resolve world state: `ClearOutcomeNode`, `PatienceWatchdogNode`, `HoldNode`, `SatisfyNode`, `NeedsDecayNode`. |
+| `primitives.py` | Leaf nodes that don't resolve world state: `ClearOutcomeNode`, `PatienceWatchdogNode`, `HoldNode`, `SatisfyNode`, `NeedsDecayNode`, `TuneNode` (holds a step's `tune:`), `ConditionalTunesNode` (holds the type's `tunes:` entries while their `when` holds). |
 | `navigation.py` | `ResolveObjectNode`, `GoToNode` - target resolution and approach. |
 | `attention.py` | `AttentionNode` - drives every channel of one `attention:` block: resolves each entry per tick (`partner`/`partners` via `ctx.im`, `target` via `StepContext`, `goal` via `movement.command`, `robot:<name>`, object id, agent name, object type, agent id, literal xyz, relative azimuth/elevation), walks the list (`dwell` or `unreachable` cycling with the reach hysteresis from `../reach.py`), faces the winning channel's entry when `face` allows and the ped is neither walking (`walking` predicate) nor bound (`FACE_ENTER_RAD`, `FACE_KEEP_RAD`, `FACE_TIMEOUT_S`), and publishes the shown channels as `GestureIntent`s on `movement.gestures`. `bare=True` halts, owns duration and returns SUCCESS or FAILURE (unresolved past `RESOLVE_TIMEOUT_S`, facing timeout). Riders never finish and FAIL only when `required`. `suspend()` lowers the channels without losing list position. `terminate()` clears `heading_goal` and removes `hold: release` channels. `SequenceRiderNode` ticks a sequence's rider next to its steps. |
-| `interaction.py` | `SeekNode` (universal find-or-create-or-join), `CancelNode` (explicit teardown), `BlockNode` (pursuit+SEEK for BLOCK). |
+| `interaction.py` | `SeekNode` (universal find-or-create-or-join), `CancelNode` (explicit teardown), `BlockNode` (pursuit+SEEK for BLOCK, pursuit speed boost held as a tune). |
 | `autonomous.py` | `AutonomousNode` - utility-based action selection inside a step. |
-| `state_machine.py` | `SequenceStateMachine` - runs one compiled sequence with `transitions` / `then` / `on_failure` edges. |
+| `state_machine.py` | `SequenceStateMachine` - runs one compiled sequence with `transitions` / `then` / `on_failure` edges and holds the sequence's `tune:`. |
 
 Public API is re-exported from `__init__.py`. Import `from arena_humansim.core.behavior.nodes import ...`; submodules are internal and can be reorganized freely.
 
@@ -24,6 +24,7 @@ Public API is re-exported from `__init__.py`. Import `from arena_humansim.core.b
 - **Commands vs signals.** NAVIGATE and STOP are movement commands - the emitter owns the agent's motion. SEEK is a signal that mutates IM-side state (creates/joins/queues) and does not by itself move the agent; the formation emitter or a sibling `GoToNode` is what moves them. The motion pipeline filters `movement.command` by type: only NAVIGATE feeds the global planner and pool terminals.
 - **Arrival latch is per-step.** Once `GoToNode` enters, it resets `pool.latched` for the agent so a stale latch from a previous `go_to` step can't short-circuit this one to SUCCESS. The latch also releases whenever `pool.has_terminal` goes False (i.e. the step emitted a STOP or SEEK), preventing spurious arrivals on the next NAVIGATE.
 - **Explicit teardown.** Interactions end via `CancelNode` (STOP with `reason=CANCELED`) or contract duration expiring (COMPLETED). `SeekNode.terminate()` is a no-op - the interaction persists after the node exits. Teardown is always explicit.
+- **Intrinsics go through `retune`.** A node that needs other params or another desired speed while it runs takes a key with `retune(agent, self.name, tune)` in `initialise` or `update` and releases it with `retune(agent, self.name, None)` in `terminate`. Never write `agent.params` or `state.desired_velocity` directly. See [../README.md](../README.md#tunes).
 - **Composite teardown.** Use `stop(INVALID)` to cascade `terminate()` into children; `terminate()` alone is a leaf-only hook. See `SequenceStateMachine._goto`.
 - **Signals on `BehaviorTreeMovement`.** IM writes these; nodes read them.
   - `interaction_id` - primary interaction the agent is in (FORMING or ACTIVE), or `None`. Cleared when the agent leaves.

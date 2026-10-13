@@ -50,6 +50,7 @@ def create_agent(
     else:
         params = agent_type
 
+    state.desired_velocity = params.desired_velocity
     needs = None
     if params.needs:
         needs = NeedsState(needs={name: NeedState(value=sn.initial, decay_rate=sn.decay_rate) for name, sn in params.needs.items()})

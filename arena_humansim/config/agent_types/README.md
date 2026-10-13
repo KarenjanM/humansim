@@ -67,7 +67,7 @@ desired_velocity: {mean: 0.5, std: 0.08, clip_low: 0.2, clip_high: 0.8}
 
 `extends:` pulls in the parent's full field set, then this file's fields override. Nested structures (`perception`, `local_planner_params`) merge field-by-field, not as whole replacements, and `locomotion` / `pose` merge recursively (a child's `cadence: {max: 1.2}` keeps the parent's other cadence fields). Inheritance chains resolve in the loader, see [../../arena_humansim/core/agents/loader.py](../../arena_humansim/core/agents/loader.py) (`resolve_extends`).
 
-When a scenario references a type by path (`agent_type: ./doctor.yaml`, the normal case for a `dynamic:` entry - see [task_generator human README](../../../../task_generator/task_generator/simulators/human/README.md)), that single file is loaded on its own and `extends:` can only reach the types shipped here (`adult`, `elder`, `robot`) - it cannot reach a sibling file in the same scenario's directory. Extending another scenario-local type only works when the whole directory is loaded together (e.g. by tooling that calls `load_agent_types(scenario_dir)`).
+When a scenario references a type by path (`agent_type: ./doctor.yaml`, the normal case for a `dynamic:` entry - see [task_generator human README](../../../../task_generator/task_generator/simulators/human/README.md)), that single file is loaded on its own and `extends:` can only reach the types shipped here (`adult`, `elder`, `child`, `hurried`, `distracted`, `robot`) - it cannot reach a sibling file in the same scenario's directory. Extending another scenario-local type only works when the whole directory is loaded together (e.g. by tooling that calls `load_agent_types(scenario_dir)`).
 
 ## Behavior trees
 
@@ -142,6 +142,31 @@ sequences:
 ```
 
 `transitions` evaluate every tick - they can cut a step short. `then` only fires on the last step succeeding. `on_failure: <seq_name>` routes to another sequence when the current one FAILs (unset => propagate failure to the root). A sequence also accepts `interruptible` (bool, default `true`), which is parsed but not yet consulted anywhere.
+
+`tune:` holds a transform on the agent's own parameters for as long as the sequence runs:
+
+```yaml
+sequences:
+  evacuate:
+    tune:
+      desired_velocity: {mul: 1.5}
+      max_velocity: 2.6
+      perception: {vision_range: {add: -1.0}}
+      local_planner_params: {repulsion_strength: {poly: [0.0, 0.0, 2.0]}}
+    steps: ...
+```
+
+Each entry is a polynomial in the value sampled at spawn: a bare number sets it, `{mul: m}` scales it, `{add: b}` shifts it, both together give `add + mul * x`, and `{poly: [c0, c1, ...]}` evaluates `c0 + c1 x + c2 x^2 ...`. Tunable fields are `desired_velocity`, `max_velocity`, `max_acceleration`, `max_deceleration`, `min_turning_radius`, `pivot_angular_velocity`, `reaction_time`, `personal_space_min`, `perception.vision_range|vision_fov|proximity_sense` and any `local_planner_params` key (a key the planner does not sample can only be set, a transform on it fails when the agent spawns). Unknown fields raise at load.
+
+A step accepts the same `tune:` and holds it for that step only. The agent type accepts a `tunes:` list whose entries hold their tune while a condition on the needs holds, independent of the running sequence, so a stimulus retunes a live agent without restarting its step. Every need named in `when` must be declared under `needs:`.
+
+```yaml
+tunes:
+  - when: {alarm: {above: 50.0}}
+    tune: {desired_velocity: {mul: 1.5}, perception: {vision_range: 2.0}}
+```
+
+Tunes stack by owner and fold per field in a fixed order: type condition first, then sequence, then step, then nodes such as the `BLOCK` pursuit boost, so an inner owner always acts on the outer one's result. Each owner releases its own when it ends, and releasing the last one puts the spawn values back. A sequence re-entering itself keeps its tune.
 
 ### Stimuli
 
@@ -232,6 +257,9 @@ For a `dynamic:` scenario entry, `ArenaHumanDynamicObstacle.sample_params` (in [
 
 - `adult` - nominal pedestrian (desired 1.1 m/s, 5 m vision, 180deg FOV).
 - `elder` - slower, narrower FOV, longer SFM relaxation. Demonstrates how heterogeneity drops out of a handful of distribution tweaks.
+- `child` - small body (0.18 m), wide speed spread (0.4-1.8 m/s), 3 m vision, weaker SFM repulsion.
+- `hurried` - fast (desired 1.7 m/s), narrower FOV, shorter SFM relaxation and repulsion range.
+- `distracted` - phone-walker: 2 m vision, 90deg FOV, longer SFM relaxation.
 - `robot` - fixed (non-distribution) values for a robot-driven agent: zero `min_turning_radius`, 360deg FOV, no `idle_gaze_rate`.
 - `wheelchair_manual` - manually propelled wheelchair user: `extends: adult`, `along_heading` kinematics on `hsfm` with `heading_source: total`, a 1.1 m capsule footprint, push-stroke speed modulation (two harmonics), stall recovery with a 0.3 m reverse, seated pose with arm push strokes and the `human::mobility::wheelchair` asset. Every number in the file is a placeholder pending literature values (push cadence, stroke speed profile, footprint), not a measured profile.
 - `adult_limp_right` - adult with a right-leg limp: `extends: adult`, uneven cycle timing (`phase_warp.split`), one speed dip and one lateral lurch per cycle, and an asymmetric walk pose (stiff right knee, shortened right hip swing, trunk lean). Every number in the file is a placeholder pending a fitted profile.

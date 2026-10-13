@@ -25,8 +25,8 @@ _ROS_SKIP_REASON = "ROS2 not discoverable - source install/setup.bash to enable"
 
 def _ros_available() -> bool:
     try:
-        import rclpy  # noqa: F401
-        import arena_humansim_msgs.srv  # noqa: F401
+        import rclpy
+        import arena_humansim_msgs.srv
     except ImportError:
         return False
     return True

@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import py_trees
 
-from arena_humansim.core.agents import BaseAgent, SequenceDef
+from arena_humansim.core.agents import SEQUENCE, BaseAgent, SequenceDef, retune
 from arena_humansim.core.behavior.nodes.helpers import _bt_logger
 from arena_humansim.core.behavior.nodes.utility import preconditions_met
 from arena_humansim.core.interaction_manager import InteractionManager
 from arena_humansim.utils.types import BehaviorTreeMovement, InteractionOutcome
+
+TUNE_KEY = "sequence"
 
 
 class SequenceStateMachine(py_trees.behaviour.Behaviour):
@@ -31,6 +33,7 @@ class SequenceStateMachine(py_trees.behaviour.Behaviour):
     def initialise(self) -> None:
         self._current_name = self._initial
         self._current_node = self._sequences[self._initial]
+        retune(self._agent, TUNE_KEY, self._sequence_defs[self._initial].tune, SEQUENCE)
         self._current_node.initialise()
 
     def update(self) -> py_trees.common.Status:
@@ -56,8 +59,10 @@ class SequenceStateMachine(py_trees.behaviour.Behaviour):
         return py_trees.common.Status.RUNNING
 
     def terminate(self, new_status: py_trees.common.Status) -> None:
-        self._current_node.terminate(new_status)
+        del new_status
+        self._current_node.stop(py_trees.common.Status.INVALID)
         self._clear_gestures()
+        retune(self._agent, TUNE_KEY, None)
 
     def _clear_gestures(self) -> None:
         mv = self._agent.movement
@@ -78,6 +83,7 @@ class SequenceStateMachine(py_trees.behaviour.Behaviour):
         # would kick everyone out of a group conversation the moment it re-enters the seek step.
         if target != self._current_name and self._im is not None:
             self._im.force_stop(self._agent.state.agent_id, reason=InteractionOutcome.INTERRUPTED)
+        retune(self._agent, TUNE_KEY, self._sequence_defs[target].tune, SEQUENCE)
         self._current_name = target
         self._current_node = self._sequences[target]
         self._current_node.initialise()

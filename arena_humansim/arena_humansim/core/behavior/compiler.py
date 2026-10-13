@@ -8,7 +8,7 @@ import py_trees
 from rclpy.logging import get_logger
 
 from arena_humansim.core.agents import AgentType, BaseAgent, ParamDist
-from arena_humansim.core.agents.types import ActionDef, AttentionDef, AttentionStepDef, ClipDef, GoToStepDef, SequenceDef, StepDef
+from arena_humansim.core.agents.types import ActionDef, AttentionDef, AttentionStepDef, ClipDef, GoToStepDef, SequenceDef, StepDef, TuneDef
 from arena_humansim.core.interaction_kinds import HandleKind, InteractionType, is_object_bound_name
 from arena_humansim.core.interaction_manager import InteractionManager
 from arena_humansim.core.pool import AgentPool
@@ -26,6 +26,7 @@ from .nodes import (
     BlockNode,
     CancelNode,
     ClearOutcomeNode,
+    ConditionalTunesNode,
     GoToNode,
     HoldNode,
     NeedsDecayNode,
@@ -36,6 +37,7 @@ from .nodes import (
     SeekNode,
     SequenceRiderNode,
     SequenceStateMachine,
+    TuneNode,
 )
 from .step_context import StepContext
 
@@ -122,6 +124,25 @@ def _watched(node_name: str, watchdog: py_trees.behaviour.Behaviour, sequence_ch
         name=node_name,
         policy=py_trees.common.ParallelPolicy.SuccessOnOne(),
         children=children,
+    )
+
+
+def _tunes_of(agent_type: AgentType) -> list[tuple[str, TuneDef]]:
+    found = [(f"tunes[{i}]", entry.tune) for i, entry in enumerate(agent_type.tunes)]
+    for seq_name, seq_def in agent_type.sequences.items():
+        if seq_def.tune is not None:
+            found.append((seq_name, seq_def.tune))
+        found.extend((f"{seq_name}/{step_name}", step.tune) for step_name, step in seq_def.steps.items() if step.tune is not None)
+    return found
+
+
+def _tuned(node_name: str, agent: BaseAgent, tune: TuneDef | None, node: py_trees.behaviour.Behaviour) -> py_trees.behaviour.Behaviour:
+    if tune is None:
+        return node
+    return _StepParallel(
+        name=f"{node_name}/tuned",
+        policy=py_trees.common.ParallelPolicy.SuccessOnOne(),
+        children=[TuneNode(name=f"{node_name}/tune", agent=agent, tune=tune), node],
     )
 
 
@@ -478,6 +499,8 @@ class BehaviorTreeFactory:
                 if isinstance(transition.when, str):
                     raise ValueError(f"String-based transition condition '{transition.when}' in sequence '{seq_name}' is not supported. Use dict[str, NeedCondition] instead.")
 
+        self._tunes = _tunes_of(agent_type)
+
         self._seq_recipes: dict[str, list[_StepRecipe]] = {}
         for seq_name, seq_def in agent_type.sequences.items():
             recipes: list[_StepRecipe] = []
@@ -494,6 +517,14 @@ class BehaviorTreeFactory:
                 )
             self._seq_recipes[seq_name] = recipes
 
+    def _check_tunes(self, agent: BaseAgent) -> None:
+        sampled = agent.params.local_planner_params
+        for where, tune in self._tunes:
+            for key, poly in tune.fields.items():
+                group, _, name = key.partition(".")
+                if group == "local_planner_params" and len(poly) > 1 and name not in sampled:
+                    raise ValueError(f"{self._agent_type.name}/{where}: tune {key} transforms a param {agent.params.local_planner} does not sample")
+
     def build(
         self,
         agent: BaseAgent,
@@ -507,9 +538,10 @@ class BehaviorTreeFactory:
         im: InteractionManager | None = None,
         name_lookup: NameLookup | None = None,
     ) -> py_trees.trees.BehaviourTree:
+        self._check_tunes(agent)
         compiled_sequences: dict[str, py_trees.behaviour.Behaviour] = {}
         for seq_name, recipes in self._seq_recipes.items():
-            children = [r.build(agent, world, event_bus, rng, dt, agent_lookup, pool, is_bound_lookup, im, name_lookup) for r in recipes]
+            children = [_tuned(r.node_name, agent, r.step_def.tune, r.build(agent, world, event_bus, rng, dt, agent_lookup, pool, is_bound_lookup, im, name_lookup)) for r in recipes]
             steps: py_trees.behaviour.Behaviour
             if len(children) == 1:
                 steps = children[0]
@@ -531,13 +563,14 @@ class BehaviorTreeFactory:
         )
 
         if self._has_needs and agent.needs is not None:
+            root_children: list[py_trees.behaviour.Behaviour] = [NeedsDecayNode(name=self._decay_name, agent=agent, dt=dt)]
+            if self._agent_type.tunes:
+                root_children.append(ConditionalTunesNode(name=f"{self._agent_type.name}_tunes", agent=agent, tunes=self._agent_type.tunes))
+            root_children.append(state_machine)
             root = py_trees.composites.Parallel(
                 name=self._root_name,
                 policy=py_trees.common.ParallelPolicy.SuccessOnAll(),
-                children=[
-                    NeedsDecayNode(name=self._decay_name, agent=agent, dt=dt),
-                    state_machine,
-                ],
+                children=root_children,
             )
         else:
             root = state_machine

@@ -22,6 +22,7 @@ import attrs
 
 from arena_humansim.utils.types import AgentState, BehaviorTreeMovement, BeliefState, NeedsState, WaypointMovement
 
+from .tune import Tunes
 from .types import SampledParams
 
 
@@ -57,3 +58,4 @@ class BaseAgent:
     belief: BeliefState | None = None
     movement: WaypointMovement | BehaviorTreeMovement = attrs.Factory(WaypointMovement)
     needs: NeedsState | None = None
+    tunes: Tunes = attrs.Factory(Tunes)

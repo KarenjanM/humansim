@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+import attrs
 import pytest
 
 from arena_humansim.core.agents.base import BaseAgent
@@ -15,6 +16,17 @@ def test_add_agent_grows_n(pool_empty: Callable[..., AgentPool], agent_factory: 
         idx = pool.add_agent(agent_factory(agent_id=i + 1, x=float(i)))
         assert idx == i
         assert pool.n == i + 1
+
+
+def test_update_agent_rewrites_params_and_keeps_the_posture_radius(pool_with_agents: Callable[..., AgentPool], agent_factory: Callable[..., BaseAgent]) -> None:
+    pool = pool_with_agents(3)
+    agent = agent_factory(agent_id=2)
+    i = pool.idx(2)
+    pool.agent_radius[i] = 0.9
+    agent.params = attrs.evolve(agent.params, max_velocity=4.0, perception=attrs.evolve(agent.params.perception, vision_range=2.0))
+    agent.state.desired_velocity = 0.3
+    assert pool.update_agent(agent) == i
+    assert (pool.max_velocity[i], pool.vision_range[i], pool.desired_vel[i], pool.agent_radius[i]) == (4.0, 2.0, 0.3, 0.9)
 
 
 def test_multiple_adds_preserve_monotonic_n(pool_with_agents: Callable[..., AgentPool]) -> None:

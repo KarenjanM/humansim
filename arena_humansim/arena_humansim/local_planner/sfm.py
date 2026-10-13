@@ -275,6 +275,9 @@ class SFMPlanner(LocalPlanner):
         self._repulsion_range[idx] = self._param(lp, "repulsion_range")
         self._anisotropy[idx] = self._param(lp, "anisotropy")
 
+    def on_pool_update(self, idx: int, agent: BaseAgent) -> None:
+        self.on_pool_add(idx, agent)
+
     def on_pool_swap(self, idx: int, last: int) -> None:
         self._relaxation_time[idx] = self._relaxation_time[last]
         self._repulsion_strength[idx] = self._repulsion_strength[last]

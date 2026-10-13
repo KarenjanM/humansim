@@ -1,8 +1,9 @@
 import numpy as np
 import py_trees
 
-from arena_humansim.core.agents import BaseAgent, ParamDist
+from arena_humansim.core.agents import CONDITION, STEP, BaseAgent, ConditionalTune, ParamDist, TuneDef, retune
 from arena_humansim.core.behavior.nodes.helpers import _nav_command, _sample_param_dist
+from arena_humansim.core.behavior.nodes.utility import preconditions_met
 from arena_humansim.core.behavior.step_context import StepContext
 from arena_humansim.utils import DT
 from arena_humansim.utils.types import BehaviorTreeMovement
@@ -119,3 +120,42 @@ class NeedsDecayNode(py_trees.behaviour.Behaviour):
         if self._agent.needs is not None:
             self._agent.needs.decay(self._dt)
         return py_trees.common.Status.RUNNING
+
+
+class TuneNode(py_trees.behaviour.Behaviour):
+    """Holds `tune` on the agent under its own name from initialise to terminate."""
+
+    def __init__(self, name: str, agent: BaseAgent, tune: TuneDef) -> None:
+        super().__init__(name=name)
+        self._agent = agent
+        self._tune = tune
+
+    def initialise(self) -> None:
+        retune(self._agent, self.name, self._tune, STEP)
+
+    def update(self) -> py_trees.common.Status:
+        return py_trees.common.Status.RUNNING
+
+    def terminate(self, new_status: py_trees.common.Status) -> None:
+        del new_status
+        retune(self._agent, self.name, None)
+
+
+class ConditionalTunesNode(py_trees.behaviour.Behaviour):
+    """Holds each `tunes:` entry of the agent type while its `when` holds on the needs."""
+
+    def __init__(self, name: str, agent: BaseAgent, tunes: tuple[ConditionalTune, ...]) -> None:
+        super().__init__(name=name)
+        self._agent = agent
+        self._tunes = tunes
+
+    def update(self) -> py_trees.common.Status:
+        needs = self._agent.needs.needs if self._agent.needs is not None else {}
+        for i, entry in enumerate(self._tunes):
+            retune(self._agent, f"{self.name}/{i}", entry.tune if preconditions_met(needs, entry.when) else None, CONDITION)
+        return py_trees.common.Status.RUNNING
+
+    def terminate(self, new_status: py_trees.common.Status) -> None:
+        del new_status
+        for i in range(len(self._tunes)):
+            retune(self._agent, f"{self.name}/{i}", None)

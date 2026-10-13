@@ -33,6 +33,10 @@ class PoolAware:
     def on_pool_add(self, idx: int, agent: BaseAgent) -> None:
         pass
 
+    def on_pool_update(self, idx: int, agent: BaseAgent) -> None:
+        """The agent at `idx` has new params (`AgentPool.update_agent`); re-read what you cache from them."""
+        pass
+
     def on_pool_swap(self, idx: int, last: int) -> None:
         pass
 
@@ -124,21 +128,8 @@ class AgentPool:
         self.theta[i] = agent.state.pose.theta
         self.vel[i, 0] = agent.state.velocity[0]
         self.vel[i, 1] = agent.state.velocity[1]
-        self.desired_vel[i] = agent.state.desired_velocity
-
-        p = agent.params
-        self.agent_radius[i] = p.agent_radius
-        self.max_velocity[i] = p.max_velocity
-        self.max_acceleration[i] = p.max_acceleration
-        self.max_deceleration[i] = p.max_deceleration
-        self.min_turning_radius[i] = p.min_turning_radius
-        self.pivot_angular_velocity[i] = p.pivot_angular_velocity
-
-        perc = p.perception
-        self.vision_range[i] = perc.vision_range
-        self.vision_fov[i] = perc.vision_fov
-        self.proximity_sense[i] = perc.proximity_sense
-        self.vision_occlusion[i] = perc.vision_occlusion
+        self.agent_radius[i] = agent.params.agent_radius
+        self._write_params(i, agent)
 
         self.has_goal[i] = False
         self.has_terminal[i] = False
@@ -154,6 +145,28 @@ class AgentPool:
         for ext in self._extensions:
             ext.on_pool_add(i, agent)
         return i
+
+    def update_agent(self, agent: BaseAgent) -> int:
+        """Rewrite a pooled agent's param rows in place; position, velocity, goals and the posture radius stay."""
+        i = self._id_to_idx[agent.state.agent_id]
+        self._write_params(i, agent)
+        for ext in self._extensions:
+            ext.on_pool_update(i, agent)
+        return i
+
+    def _write_params(self, i: int, agent: BaseAgent) -> None:
+        self.desired_vel[i] = agent.state.desired_velocity
+        p = agent.params
+        self.max_velocity[i] = p.max_velocity
+        self.max_acceleration[i] = p.max_acceleration
+        self.max_deceleration[i] = p.max_deceleration
+        self.min_turning_radius[i] = p.min_turning_radius
+        self.pivot_angular_velocity[i] = p.pivot_angular_velocity
+        perc = p.perception
+        self.vision_range[i] = perc.vision_range
+        self.vision_fov[i] = perc.vision_fov
+        self.proximity_sense[i] = perc.proximity_sense
+        self.vision_occlusion[i] = perc.vision_occlusion
 
     def swap_remove(self, agent_id: int) -> int | None:
         idx = self._id_to_idx.pop(agent_id)

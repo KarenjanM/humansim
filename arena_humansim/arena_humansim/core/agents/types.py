@@ -7,6 +7,7 @@ __all__ = [
     "CadenceDist",
     "ChannelDef",
     "ClipDef",
+    "ConditionalTune",
     "GoToStepDef",
     "HEADING_SOURCES",
     "KINEMATICS",
@@ -24,7 +25,10 @@ __all__ = [
     "SampledPerception",
     "SequenceDef",
     "StepDef",
+    "TUNABLE",
+    "TUNABLE_PERCEPTION",
     "TransitionDef",
+    "TuneDef",
     "VarDef",
     "sample_agent_type",
 ]
@@ -182,6 +186,25 @@ class AttentionDef:
         return next((name for name in (*ARM_CHANNELS, "gaze") if name in present), None)
 
 
+Poly = tuple[float, ...]
+
+TUNABLE = frozenset({"desired_velocity", "max_velocity", "max_acceleration", "max_deceleration", "min_turning_radius", "pivot_angular_velocity", "reaction_time", "personal_space_min"})
+TUNABLE_PERCEPTION = frozenset({"vision_range", "vision_fov", "proximity_sense"})
+
+
+@attrs.frozen
+class TuneDef:
+    """Polynomials in the spawn value per field, keyed `max_velocity`, `perception.vision_range` or `local_planner_params.<name>`."""
+
+    fields: dict[str, Poly] = attrs.Factory(dict)
+
+
+@attrs.frozen
+class ConditionalTune:
+    when: dict[str, NeedCondition]
+    tune: TuneDef
+
+
 @attrs.frozen
 class StepDef:
     target: str | None = None
@@ -210,6 +233,7 @@ class StepDef:
     wait_for_outcome: bool = False
 
     attention: AttentionDef | None = None
+    tune: TuneDef | None = None
 
 
 @attrs.frozen
@@ -220,6 +244,7 @@ class AttentionStepDef:
     satisfies: dict[str, float] = attrs.Factory(dict)
     on_failure: str = "abort"
     interruptible: bool | None = None
+    tune: TuneDef | None = None
 
 
 @attrs.frozen
@@ -232,6 +257,7 @@ class GoToStepDef:
     satisfies: dict[str, float] = attrs.Factory(dict)
     on_failure: str = "abort"
     interruptible: bool | None = None
+    tune: TuneDef | None = None
 
 
 @attrs.frozen
@@ -242,6 +268,7 @@ class SequenceDef:
     interruptible: bool = True
     transitions: tuple[TransitionDef, ...] = ()
     attention: AttentionDef | None = None
+    tune: TuneDef | None = None
 
 
 @attrs.frozen
@@ -331,6 +358,7 @@ class AgentType:
     actions: dict[str, ActionDef] = attrs.Factory(dict)
     sequences: dict[str, SequenceDef] = attrs.Factory(dict)
     initial_sequence: str = "default"
+    tunes: tuple[ConditionalTune, ...] = ()
     vars: dict[str, VarDef] = attrs.Factory(dict)
     extends: str | None = None
 

@@ -45,6 +45,10 @@ A step with `patience: {mean: 5.0}` and a target 20 m away may fail during phase
 
 Cascade: step override > object override > per-`InteractionKind` default (see [../../core/interaction_kinds.py](../../core/interaction_kinds.py)) > `DISTANCE_TOLERANCE`. Full table and authoring examples in [../../../config/scenarios/README.md](../../../config/scenarios/README.md).
 
+## Tunes
+
+[../agents/tune.py](../agents/tune.py) holds the overlay. `agent.tunes` keeps the spawn params as base plus `{key: (level, TuneDef)}`. `retune(agent, key, tune | None, level)` folds the active tunes per field over the base in level order (`CONDITION`, `SEQUENCE`, `STEP`, `NODE`, then the order taken) into `agent.params` and `state.desired_velocity` and marks `agent.tunes.dirty`, which the manager answers in the decide phase with `AgentPool.update_agent` (pool rows rewritten, `on_pool_update` on the pool extensions). It is idempotent on unchanged content. Owners: `SequenceStateMachine` holds the sequence's `tune:` under the key `sequence` across every `_goto` and releases it in `terminate()`, a `TuneNode` sibling in the step parallel holds a step's `tune:`, `ConditionalTunesNode` at the root holds each `tunes:` entry of the type while its `when` holds on the needs, and `BlockNode` holds its pursuit boost under its own name. Nodes never write `agent.params` or `state.desired_velocity` directly, they take and release a key, and code that replaces the spawn params at runtime (`_reseat_agents`) goes through `rebase`. Schema in [../../../config/agent_types/README.md](../../../config/agent_types/README.md#sequences).
+
 ## Signals on `BehaviorTreeMovement`
 
 IM writes `interaction_id` and `last_outcome`; BT nodes read them. `ClearOutcomeNode` at the head of every compiled step resets them so stale signals don't short-circuit a re-entry. Full rules and outcome encoding in [nodes/README.md](nodes/README.md#authoring-rules).

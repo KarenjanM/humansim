@@ -90,7 +90,7 @@ def _scenario(bt_tick_interval: int = 5) -> ScenarioConfig:
 @pytest.fixture
 def manager_factory(rclpy_context: object) -> Iterator[Callable[..., AgentManager]]:
     try:
-        from arena_humansim_msgs.srv import NotifyStimulus  # noqa: F401
+        from arena_humansim_msgs.srv import NotifyStimulus
     except ImportError:
         pytest.skip("arena_humansim_msgs built without NotifyStimulus")
     from tests.integration._helpers import build_manager

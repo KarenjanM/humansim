@@ -10,7 +10,7 @@ from arena_humansim.local_planner import LocalPlanner, _registry
 from arena_humansim.local_planner.robot.base import RobotPolicy
 from arena_humansim.utils.types import Pose2D, Segments, WallAware
 
-from ._geometry import corridor_walls, single_agent, vertical_wall  # noqa: F401
+from ._geometry import corridor_walls, single_agent, vertical_wall
 from tests.contracts._util import registry_ids
 
 

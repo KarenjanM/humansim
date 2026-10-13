@@ -287,7 +287,6 @@ class BehaviorTreeMovement:
     heading_goal: float | None = None
     gestures: tuple[GestureIntent, ...] = ()
     posture: str = ""  # authored posture while a step holds one (standing | seated | prone), empty = none
-    retuned: bool = False  # a sequence `tune` changed the agent's params; the manager refreshes its pool row
 
 
 class ShapeType(enum.Enum):

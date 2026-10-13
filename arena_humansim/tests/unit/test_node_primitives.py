@@ -4,6 +4,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, cast
 
+import attrs
 import numpy as np
 import pytest
 
@@ -608,6 +609,7 @@ def test_block_interrupted_outcome_returns_failure(agent_factory: Callable[..., 
 
 def test_block_terminate_restores_velocity_and_cancels_via_im(agent_factory: Callable[..., BaseAgent], rng_np: np.random.Generator) -> None:
     agent = _agent_with_bt(agent_factory, agent_id=7, x=0.0, y=0.0)
+    agent.params = attrs.evolve(agent.params, desired_velocity=0.9)
     agent.state.desired_velocity = 0.9
     target = agent_factory(agent_id=99, x=0.1, y=0.0)
     target.state.velocity = (0.0, 0.0)

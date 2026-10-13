@@ -67,6 +67,8 @@ from arena_humansim.core.agents import (
     SampledParams,
     TickPhase,
     create_agent,
+    rebase,
+    spawn_params,
 )
 from arena_humansim.core.agents.loader import resolve_agent_type_name
 from arena_humansim.core.agents.types import ATTENTION_KEYWORDS, ParamDist
@@ -806,7 +808,8 @@ class AgentManager(Node):
                 elif self._pool.policy_idx[idx] >= 0:
                     self._pool.policy_idx[idx] = self._default_policy_idx
 
-            lp = dict(agent.params.local_planner_params)
+            spawn = spawn_params(agent)
+            lp = dict(spawn.local_planner_params)
             for key in {*lp, *type(agent.local_planner).PARAM_DEFAULTS} - pinned.lp_keys:
                 dist = self._lp_dist(agent, key)
                 if dist is None:
@@ -814,8 +817,8 @@ class AgentManager(Node):
                 old = old_means.get(key, dist.mean)
                 new = dist.with_mean(self._lp_means.get(key, dist.mean))
                 lp[key] = float(np.clip(lp.get(key, old) + new.mean - old, new.clip_low, new.clip_high))
-            if lp != agent.params.local_planner_params:
-                agent.params = attrs.evolve(agent.params, local_planner_params=lp)
+            if lp != spawn.local_planner_params:
+                rebase(agent, attrs.evolve(spawn, local_planner_params=lp))
                 for planner in self._policies:
                     if planner.PARAM_DEFAULTS:
                         planner.on_pool_add(idx, agent)
@@ -1434,8 +1437,8 @@ class AgentManager(Node):
 
             for agent_id, agent in self._agents.items():
                 mv = agent.movement
-                if isinstance(mv, BehaviorTreeMovement) and mv.retuned:
-                    mv.retuned = False
+                if agent.tunes.dirty:
+                    agent.tunes.dirty = False
                     if agent_id in pool._id_to_idx:
                         pool.update_agent(agent)
                 if isinstance(mv, BehaviorTreeMovement) and mv.command is not None:

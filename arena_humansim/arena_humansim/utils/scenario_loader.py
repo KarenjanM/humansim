@@ -7,6 +7,8 @@ from arena_humansim.core.agents.types import (
     ARM_CHANNELS,
     CHANNEL_SLOTS,
     HEADING_SOURCES,
+    TUNABLE,
+    TUNABLE_PERCEPTION,
     ActionDef,
     AgentType,
     AttentionDef,
@@ -15,11 +17,13 @@ from arena_humansim.core.agents.types import (
     CadenceDist,
     ChannelDef,
     ClipDef,
+    ConditionalTune,
     GoToStepDef,
     LocomotionDist,
     NeedCondition,
     NeedDist,
     PerceptionDist,
+    Poly,
     Pose3,
     RelativeRef,
     RobotRef,
@@ -267,6 +271,8 @@ def _structure_go_to_step_def(val: object, _: type) -> GoToStepDef:
             d["target_pose"] = Pose2D(x=float(pose_d["x"]), y=float(pose_d["y"]), theta=float(pose_d.get("theta", 0.0)))
     if d.get("attention") is not None:
         d["attention"] = _structure_attention_def(d["attention"])
+    if d.get("tune") is not None:
+        d["tune"] = _structure_tune_def(d["tune"])
     known = {f.name for f in attrs.fields(GoToStepDef)}
     unknown = set(d) - known
     if unknown:
@@ -288,6 +294,8 @@ def _structure_attention_step_def(val: object, _: type) -> AttentionStepDef:
     att = _structure_attention_def(raw_att)
     _check_bare_attention(att, raw_att if isinstance(raw_att, dict) else {}, d.get("duration") is not None or d.get("patience") is not None)
     d["attention"] = attrs.evolve(att, required=True)
+    if d.get("tune") is not None:
+        d["tune"] = _structure_tune_def(d["tune"])
     known = {f.name for f in attrs.fields(AttentionStepDef)}
     unknown = set(d) - known
     if unknown:
@@ -375,6 +383,8 @@ def _structure_step_def(val: object, _: type) -> StepDef:
         if d.get("autonomous", False):
             raise ValueError("'attention' is not supported on 'autonomous: true' steps")
         d["attention"] = _structure_attention_def(d["attention"])
+    if d.get("tune") is not None:
+        d["tune"] = _structure_tune_def(d["tune"])
     known = {f.name for f in attrs.fields(StepDef)}
     unknown = set(d) - known
     if unknown:
@@ -436,23 +446,55 @@ def _structure_sequence_def(val: object, _: type) -> SequenceDef:
     return SequenceDef(**d)
 
 
+def _tune_number(key: str, val: object) -> float:
+    if isinstance(val, bool) or not isinstance(val, (int, float)):
+        raise ValueError(f"tune {key}: expected a number, got {val!r}")
+    return float(val)
+
+
+def _structure_poly(key: str, val: object) -> Poly:
+    if not isinstance(val, dict):
+        return (_tune_number(key, val),)
+    unknown = set(val) - {"mul", "add", "poly"}
+    if unknown or not val:
+        raise ValueError(f"tune {key}: expected a number, mul and/or add, or poly, got {val!r}")
+    if "poly" in val:
+        if len(val) > 1:
+            raise ValueError(f"tune {key}: poly excludes mul and add")
+        coefficients = val["poly"]
+        if not isinstance(coefficients, (list, tuple)) or not coefficients:
+            raise ValueError(f"tune {key}: poly needs a list of at least one coefficient")
+        return tuple(_tune_number(key, c) for c in coefficients)
+    return (_tune_number(key, val.get("add", 0.0)), _tune_number(key, val.get("mul", 1.0)))
+
+
 def _structure_tune_def(val: object) -> TuneDef:
     if isinstance(val, TuneDef):
         return val
+    fields: dict[str, Poly] = {}
+    for key, v in dict(val).items():
+        if key in ("perception", "local_planner_params"):
+            if not isinstance(v, dict):
+                raise ValueError(f"tune {key}: expected a mapping")
+            for name, inner in v.items():
+                if key == "perception" and name not in TUNABLE_PERCEPTION:
+                    raise ValueError(f"unknown tune perception field {name!r}; expected one of {sorted(TUNABLE_PERCEPTION)}")
+                fields[f"{key}.{name}"] = _structure_poly(f"{key}.{name}", inner)
+        elif key in TUNABLE:
+            fields[key] = _structure_poly(key, v)
+        else:
+            raise ValueError(f"unknown tune field {key!r}; expected one of {sorted(TUNABLE)}, perception or local_planner_params")
+    return TuneDef(fields=fields)
+
+
+def _structure_conditional_tune(val: object) -> ConditionalTune:
+    if isinstance(val, ConditionalTune):
+        return val
     d = dict(val)
-    unknown = set(d) - {f.name for f in attrs.fields(TuneDef)}
+    unknown = set(d) - {"when", "tune"}
     if unknown:
-        raise ValueError(f"unknown tune fields: {sorted(unknown)}")
-    perception = {k: float(v) for k, v in dict(d.get("perception") or {}).items()}
-    unknown = set(perception) - {"vision_range", "vision_fov", "proximity_sense"}
-    if unknown:
-        raise ValueError(f"unknown tune perception fields: {sorted(unknown)}")
-    d["perception"] = perception
-    d["local_planner_params"] = {k: float(v) for k, v in dict(d.get("local_planner_params") or {}).items()}
-    for key in ("speed_scale", "desired_velocity", "max_velocity"):
-        if d.get(key) is not None:
-            d[key] = float(d[key])
-    return TuneDef(**d)
+        raise ValueError(f"unknown tunes entry fields: {sorted(unknown)}")
+    return ConditionalTune(when={k: converter.structure(v, NeedCondition) for k, v in dict(d["when"]).items()}, tune=_structure_tune_def(d["tune"]))
 
 
 converter.register_structure_hook(SequenceDef, _structure_sequence_def)
@@ -547,6 +589,13 @@ def _structure_agent_type(val: object, _: type) -> AgentType:
         d["actions"] = {k: converter.structure(v, ActionDef) for k, v in d["actions"].items()}
     if "sequences" in d and isinstance(d["sequences"], dict):
         d["sequences"] = {k: converter.structure(v, SequenceDef) for k, v in d["sequences"].items()}
+    if "tunes" in d:
+        d["tunes"] = tuple(_structure_conditional_tune(t) for t in d["tunes"])
+        needs = set(d.get("needs") or ())
+        for i, entry in enumerate(d["tunes"]):
+            undeclared = sorted(set(entry.when) - needs)
+            if undeclared:
+                raise ValueError(f"tunes[{i}] of {d.get('name')!r} is conditioned on needs the type does not declare: {undeclared}")
     if "vars" in d and isinstance(d["vars"], dict):
         d["vars"] = {k: VarDef(**v) if isinstance(v, dict) else v for k, v in d["vars"].items()}
     if "perception_stack" in d and isinstance(d["perception_stack"], list):

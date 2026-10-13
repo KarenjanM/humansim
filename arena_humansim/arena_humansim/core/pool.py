@@ -128,6 +128,7 @@ class AgentPool:
         self.theta[i] = agent.state.pose.theta
         self.vel[i, 0] = agent.state.velocity[0]
         self.vel[i, 1] = agent.state.velocity[1]
+        self.agent_radius[i] = agent.params.agent_radius
         self._write_params(i, agent)
 
         self.has_goal[i] = False
@@ -146,7 +147,7 @@ class AgentPool:
         return i
 
     def update_agent(self, agent: BaseAgent) -> int:
-        """Rewrite a pooled agent's param rows in place; position, velocity and goals stay."""
+        """Rewrite a pooled agent's param rows in place; position, velocity, goals and the posture radius stay."""
         i = self._id_to_idx[agent.state.agent_id]
         self._write_params(i, agent)
         for ext in self._extensions:
@@ -156,7 +157,6 @@ class AgentPool:
     def _write_params(self, i: int, agent: BaseAgent) -> None:
         self.desired_vel[i] = agent.state.desired_velocity
         p = agent.params
-        self.agent_radius[i] = p.agent_radius
         self.max_velocity[i] = p.max_velocity
         self.max_acceleration[i] = p.max_acceleration
         self.max_deceleration[i] = p.max_deceleration

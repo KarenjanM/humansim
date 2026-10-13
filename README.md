@@ -83,7 +83,7 @@ Agents can operate in two movement modes:
 
 BTs are compiled from the agent type's `sequences`, `actions`, and `needs`. Needs decay over time and trigger actions when thresholds are crossed (e.g. hunger < 30 → eat).
 
-**Authoring the YAML:** [`config/agent_types/README.md`](arena_humansim/config/agent_types/README.md#behavior-trees) documents `needs`, `actions`, `sequences`, `steps`, `transitions`, sequence `tune` (parameters a sequence holds on its agent while it runs), cancel steps, and autonomous steps with full field tables and examples.
+**Authoring the YAML:** [`config/agent_types/README.md`](arena_humansim/config/agent_types/README.md#behavior-trees) documents `needs`, `actions`, `sequences`, `steps`, `transitions`, `tune` (transforms on the agent's parameters held by a sequence, a step or a need condition), cancel steps, and autonomous steps with full field tables and examples.
 
 **Internals / extending primitives:** [`core/behavior/README.md`](arena_humansim/arena_humansim/core/behavior/README.md) covers cross-node invariants (patience phases, seek/cancel semantics, compiler dispatch). [`core/behavior/nodes/README.md`](arena_humansim/arena_humansim/core/behavior/nodes/README.md) covers adding new `py_trees.Behaviour` primitives.
 

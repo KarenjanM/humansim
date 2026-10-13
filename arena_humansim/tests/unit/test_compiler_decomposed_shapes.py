@@ -19,6 +19,7 @@ from arena_humansim.core.agents.types import (
     ParamDist,
     SequenceDef,
     StepDef,
+    TuneDef,
 )
 from arena_humansim.core.behavior.compiler import BehaviorTreeFactory
 from arena_humansim.core.behavior.nodes import (
@@ -35,6 +36,7 @@ from arena_humansim.core.behavior.nodes import (
     SeekNode,
     SequenceRiderNode,
     SequenceStateMachine,
+    TuneNode,
 )
 from arena_humansim.core.world_knowledge import WorldKnowledge
 from arena_humansim.utils.event_bus import EventBus
@@ -546,3 +548,22 @@ def test_single_step_sequence_without_rider_is_the_step(agent_factory: Callable[
     root = _compiled_root(agent_type, agent, world, event_bus, rng_np)
     assert isinstance(root, py_trees.composites.Parallel)
     assert root.name == "default/wait"
+
+
+def test_a_step_tune_wraps_the_step_in_a_parallel_with_a_tune_node(agent_factory: Callable[..., BaseAgent], world: WorldKnowledge, event_bus: EventBus, rng_np: np.random.Generator) -> None:
+    step = GoToStepDef(target_pose=Pose2D(x=1.0, y=2.0), tune=TuneDef({"max_velocity": (2.0,)}))
+    sequences = {"default": SequenceDef(steps={"walk": step})}
+    root = _compiled_root(_agent_type(sequences), agent_factory(agent_id=1), world, event_bus, rng_np)
+    assert root.name == "default/walk/tuned" and isinstance(root.policy, py_trees.common.ParallelPolicy.SuccessOnOne)
+    tune, inner = root.children
+    assert inner.name == "default/walk" and isinstance(tune, TuneNode) and tune.name == "default/walk/tune"
+
+
+def test_a_tune_that_transforms_an_unsampled_planner_param_fails_at_build(agent_factory: Callable[..., BaseAgent], world: WorldKnowledge, event_bus: EventBus, rng_np: np.random.Generator) -> None:
+    step = GoToStepDef(target_pose=Pose2D(x=1.0, y=2.0), tune=TuneDef({"local_planner_params.lookahead": (0.0, 2.0)}))
+    sequences = {"default": SequenceDef(steps={"walk": step})}
+    factory = BehaviorTreeFactory(_agent_type(sequences))
+    with pytest.raises(ValueError, match="lookahead"):
+        factory.build(agent_factory(agent_id=1), world, event_bus, rng_np, 0.05)
+    step = GoToStepDef(target_pose=Pose2D(x=1.0, y=2.0), tune=TuneDef({"local_planner_params.lookahead": (3.0,)}))
+    BehaviorTreeFactory(_agent_type({"default": SequenceDef(steps={"walk": step})})).build(agent_factory(agent_id=1), world, event_bus, rng_np, 0.05)

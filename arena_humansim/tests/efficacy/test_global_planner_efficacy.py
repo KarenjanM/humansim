@@ -10,7 +10,7 @@ from arena_humansim.core.agents.base import BaseAgent
 from arena_humansim.global_planner import GlobalPlanner, _registry
 from arena_humansim.utils.types import Pose2D, Segments
 
-from ._geometry import vertical_wall  # noqa: F401
+from ._geometry import vertical_wall
 from tests.contracts._util import registry_ids
 
 _IMPL_IDS = registry_ids(_registry)

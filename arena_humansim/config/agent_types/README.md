@@ -143,20 +143,30 @@ sequences:
 
 `transitions` evaluate every tick - they can cut a step short. `then` only fires on the last step succeeding. `on_failure: <seq_name>` routes to another sequence when the current one FAILs (unset => propagate failure to the root). A sequence also accepts `interruptible` (bool, default `true`), which is parsed but not yet consulted anywhere.
 
-`tune:` changes the agent's own parameters for as long as the sequence runs:
+`tune:` holds a transform on the agent's own parameters for as long as the sequence runs:
 
 ```yaml
 sequences:
   evacuate:
     tune:
-      speed_scale: 1.5                          # x the spawn desired_velocity (desired_velocity: sets it)
+      desired_velocity: {mul: 1.5}
       max_velocity: 2.6
-      perception: {vision_range: 2.0}           # vision_range, vision_fov, proximity_sense
-      local_planner_params: {repulsion_strength: 0.5}
+      perception: {vision_range: {add: -1.0}}
+      local_planner_params: {repulsion_strength: {poly: [0.0, 0.0, 2.0]}}
     steps: ...
 ```
 
-Values are plain numbers. The tune is applied when the agent switches into the sequence, over the values sampled at spawn, and those values come back when it switches to a sequence without one or the tree stops. A sequence re-entering itself (`then`/`on_failure` to its own name) keeps it, so a looping sequence never drops back for a tick. A `transitions` entry into a sequence with the same `steps` (and `attention`) changes only the tune: the running step, and any interaction it holds, carries on. So a twin of every sequence with a `tune:`, entered on a stimulus need, retunes a live agent mid-episode without interrupting what it does. Unknown fields raise at load.
+Each entry is a polynomial in the value sampled at spawn: a bare number sets it, `{mul: m}` scales it, `{add: b}` shifts it, both together give `add + mul * x`, and `{poly: [c0, c1, ...]}` evaluates `c0 + c1 x + c2 x^2 ...`. Tunable fields are `desired_velocity`, `max_velocity`, `max_acceleration`, `max_deceleration`, `min_turning_radius`, `pivot_angular_velocity`, `reaction_time`, `personal_space_min`, `perception.vision_range|vision_fov|proximity_sense` and any `local_planner_params` key (a key the planner does not sample can only be set, a transform on it fails when the agent spawns). Unknown fields raise at load.
+
+A step accepts the same `tune:` and holds it for that step only. The agent type accepts a `tunes:` list whose entries hold their tune while a condition on the needs holds, independent of the running sequence, so a stimulus retunes a live agent without restarting its step. Every need named in `when` must be declared under `needs:`.
+
+```yaml
+tunes:
+  - when: {alarm: {above: 50.0}}
+    tune: {desired_velocity: {mul: 1.5}, perception: {vision_range: 2.0}}
+```
+
+Tunes stack by owner and fold per field in a fixed order: type condition first, then sequence, then step, then nodes such as the `BLOCK` pursuit boost, so an inner owner always acts on the outer one's result. Each owner releases its own when it ends, and releasing the last one puts the spawn values back. A sequence re-entering itself keeps its tune.
 
 ### Stimuli
 

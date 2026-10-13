@@ -6,7 +6,7 @@ import attrs
 import numpy as np
 import py_trees
 
-from arena_humansim.core.agents import BaseAgent, ParamDist
+from arena_humansim.core.agents import BaseAgent, ParamDist, TuneDef, retune
 from arena_humansim.core.behavior.nodes.helpers import (
     _at_target,
     _nav_command,
@@ -156,13 +156,11 @@ class BlockNode(py_trees.behaviour.Behaviour):
         self._target: BaseAgent | None = None
         self._duration: float | None = None
         self._sought: bool = False
-        self._prev_desired_vel: float = agent.state.desired_velocity
 
     def initialise(self) -> None:
         self._target = self._agent_lookup(self._target_agent_id)
         self._duration = _sample_param_dist(self._duration_source, self._rng) if self._duration_source is not None else None
         self._sought = False
-        self._prev_desired_vel = self._agent.state.desired_velocity
 
     def _future_pose(self, target: BaseAgent) -> Pose2D:
         state = target.state
@@ -178,7 +176,7 @@ class BlockNode(py_trees.behaviour.Behaviour):
             return py_trees.common.Status.FAILURE
 
         if not self._sought:
-            self._agent.state.desired_velocity = self._target.state.desired_velocity * self._velocity_boost
+            retune(self._agent, self.name, TuneDef({"desired_velocity": (self._target.state.desired_velocity * self._velocity_boost,)}))
             future = self._future_pose(self._target)
             if _at_target(self._agent, future, self._tolerance):
                 spec = SeekSpec(
@@ -207,7 +205,7 @@ class BlockNode(py_trees.behaviour.Behaviour):
 
     def terminate(self, new_status: py_trees.common.Status) -> None:
         del new_status
-        self._agent.state.desired_velocity = self._prev_desired_vel
+        retune(self._agent, self.name, None)
         if self._sought:
             im = self._ctx.im if self._ctx is not None else None
             if im is not None:

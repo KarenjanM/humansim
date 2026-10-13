@@ -1,4 +1,5 @@
 """Planners attached to the pool after agents exist."""
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -6,7 +7,6 @@ from collections.abc import Callable
 import attrs
 import numpy as np
 import pytest
-
 from arena_humansim.core.agents.base import BaseAgent
 from arena_humansim.core.pool import AgentPool
 from arena_humansim.local_planner.hsfm import HSFMPlanner
@@ -51,6 +51,18 @@ def test_attach_late_backfills_every_row(pool_empty, agent_factory) -> None:
     assert np.all(late._relaxation_time[:n] > 0.0)
     assert np.all(late._angular_gain[:n] > 0.0)
     late.compute_pool(pool, dt=0.05)
+
+
+def test_update_agent_reaches_inherited_and_own_rows_of_hsfm(pool_empty, agent_factory) -> None:
+    pool = pool_empty(capacity=8)
+    planner = HSFMPlanner()
+    planner.attach(pool)
+    agent = agent_factory(agent_id=1)
+    i = pool.add_agent(agent)
+    lp = {**agent.params.local_planner_params, "relaxation_time": 0.9, "angular_gain": 7.0}
+    agent.params = attrs.evolve(agent.params, local_planner_params=lp)
+    pool.update_agent(agent)
+    assert (planner._relaxation_time[i], planner._angular_gain[i]) == (0.9, 7.0)
 
 
 def test_attach_late_covers_agents_added_afterwards(pool_empty, agent_factory) -> None:

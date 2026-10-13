@@ -1,11 +1,8 @@
 from __future__ import annotations
 
-from collections.abc import Callable
-
 import pytest
 
-from arena_humansim.core.agents import BaseAgent
-from arena_humansim.core.agents.types import AttentionDef, AttentionStepDef, ChannelDef, ClipDef, GoToStepDef, Pose3, RelativeRef, RobotRef, SequenceDef, StepDef, TuneDef
+from arena_humansim.core.agents.types import AgentType, AttentionDef, AttentionStepDef, ChannelDef, ClipDef, GoToStepDef, Pose3, RelativeRef, RobotRef, SequenceDef, StepDef, TuneDef
 from arena_humansim.utils.scenario import _structure_manual
 from arena_humansim.utils.scenario_loader import converter
 
@@ -514,18 +511,47 @@ def test_unknown_step_kind_raises() -> None:
         _step({"kind": "gesture", "gesture": "point", "at": "bench"})
 
 
-def test_sequence_tune_structures_and_applies_over_the_spawn_params(agent_factory: Callable[..., BaseAgent]) -> None:
-    tune = {"speed_scale": 2, "max_velocity": 2.6, "perception": {"vision_range": 2}, "local_planner_params": {"repulsion_strength": 0.5}}
+def test_sequence_tune_structures_every_value_form() -> None:
+    tune = {"desired_velocity": {"mul": 1.5}, "max_velocity": 2.6, "reaction_time": {"add": 0.2}, "perception": {"vision_range": {"mul": 0.5, "add": 1}}, "local_planner_params": {"repulsion_strength": {"poly": [0, 0, 2]}}}
     seq = converter.structure({"steps": {}, "tune": tune}, SequenceDef)
-    assert seq.tune == TuneDef(speed_scale=2.0, max_velocity=2.6, perception={"vision_range": 2.0}, local_planner_params={"repulsion_strength": 0.5})
-    params = agent_factory(1, 0.0, 0.0).params
-    tuned, speed = seq.tune.apply(params, 1.2)
-    assert speed == pytest.approx(2.4)
-    assert (tuned.max_velocity, tuned.perception.vision_range, tuned.local_planner_params["repulsion_strength"]) == (2.6, 2.0, 0.5)
-    assert (tuned.perception.vision_fov, tuned.agent_radius) == (params.perception.vision_fov, params.agent_radius)
+    assert seq.tune == TuneDef({"desired_velocity": (0.0, 1.5), "max_velocity": (2.6,), "reaction_time": (0.2, 1.0), "perception.vision_range": (1.0, 0.5), "local_planner_params.repulsion_strength": (0.0, 0.0, 2.0)})
 
 
-@pytest.mark.parametrize(("tune", "match"), [({"speed_scal": 2.0}, "unknown tune fields"), ({"perception": {"vision_rang": 2.0}}, "unknown tune perception fields")])
+def test_step_tune_structures_on_every_step_kind() -> None:
+    tune = {"max_velocity": 2.0}
+    assert _step({"kind": "go_to", "target_pose": {"x": 1.0, "y": 0.0}, "tune": tune}).tune == TuneDef({"max_velocity": (2.0,)})
+    assert _step({"interaction": "TALK_TO", "tune": tune}).tune == TuneDef({"max_velocity": (2.0,)})
+    assert _step({"attention": {"gaze": "robot:r"}, "duration": {"mean": 1.0}, "tune": tune}).tune == TuneDef({"max_velocity": (2.0,)})
+
+
+def test_agent_type_tunes_need_their_needs_declared() -> None:
+    raw = {"name": "t", "tunes": [{"when": {"alarm": {"above": 50.0}}, "tune": {"desired_velocity": {"mul": 1.5}}}]}
+    with pytest.raises(ValueError, match="does not declare: \\['alarm'\\]"):
+        converter.structure(raw, AgentType)
+
+
+def test_agent_type_tunes_structure_with_their_conditions() -> None:
+    raw = {"name": "t", "needs": {"alarm": {"initial": 0.0, "decay_rate": 0.0}}, "tunes": [{"when": {"alarm": {"above": 50.0}}, "tune": {"desired_velocity": {"mul": 1.5}}}]}
+    t = converter.structure(raw, AgentType)
+    assert len(t.tunes) == 1 and t.tunes[0].when["alarm"].above == 50.0 and t.tunes[0].tune == TuneDef({"desired_velocity": (0.0, 1.5)})
+
+
+@pytest.mark.parametrize(
+    ("tune", "match"),
+    [
+        ({"speed_scale": 2.0}, "unknown tune field"),
+        ({"agent_radius": 0.1}, "unknown tune field"),
+        ({"perception": {"vision_rang": 2.0}}, "unknown tune perception field"),
+        ({"max_velocity": {"mul": 2.0, "poly": [1.0]}}, "poly excludes"),
+        ({"max_velocity": {"scale": 2.0}}, "expected a number, mul"),
+        ({"max_velocity": {"poly": []}}, "at least one coefficient"),
+        ({"max_velocity": {"poly": "12"}}, "at least one coefficient"),
+        ({"max_velocity": {"mul": True}}, "expected a number"),
+        ({"max_velocity": {"mul": "2"}}, "expected a number"),
+        ({"max_velocity": {}}, "expected a number, mul"),
+        ({"max_velocity": "fast"}, "expected a number"),
+    ],
+)
 def test_sequence_tune_typo_raises(tune: dict, match: str) -> None:
     with pytest.raises(ValueError, match=match):
         converter.structure({"steps": {}, "tune": tune}, SequenceDef)

@@ -199,6 +199,8 @@ SIZE_GAP = (6.753, 2.657)  # inches
 
 def _iqr(v: np.ndarray) -> tuple[float, float, float]:
     v = v[np.isfinite(v)]
+    if v.size == 0:
+        return float("nan"), float("nan"), float("nan")
     return float(np.percentile(v, 25)), float(np.median(v)), float(np.percentile(v, 75))
 
 

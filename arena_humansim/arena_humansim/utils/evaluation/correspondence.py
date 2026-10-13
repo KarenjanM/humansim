@@ -191,13 +191,13 @@ def run_pysocialforce(starts: np.ndarray, goals: np.ndarray) -> np.ndarray:
     from pysocialforce import forces as psf_forces
 
     config = f"""title = "correspondence"
-[scene]
-enable_group = false
 agent_radius = {RADIUS}
 step_width = {DT}
 max_speed_multiplier = {V_MAX / V_PREF}
 tau = {TAU}
 resolution = 10
+[scene]
+enable_group = false
 [desired_force]
 factor = 1.0
 relaxation_time = {TAU}

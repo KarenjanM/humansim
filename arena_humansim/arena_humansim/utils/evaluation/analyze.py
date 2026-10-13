@@ -261,15 +261,16 @@ def _bootstrap_mean(values: np.ndarray, group_keys: np.ndarray, n_iter: int, rng
 
 def within_class_pairs(pairwise_df: pd.DataFrame, n_bootstrap: int = 1000, ci_seed: int = 0) -> pd.DataFrame:
     """Per-pair Hausdorff with scenario-clustered 90% bootstrap CIs, restricted to driver pairs in the same DRIVER_CLASS_FINE class. Generalizes the Sec.4.5 SFM~HSFM check to NSP/SocialGAIL and any future intra-class pair."""
+    columns = ["bucket", "class", "p1", "p2", "mean_hausdorff", "ci_lo", "ci_hi", "n_pairs", "n_scenarios"]
     if pairwise_df.empty:
-        return pd.DataFrame(columns=["bucket", "class", "p1", "p2", "mean_hausdorff", "ci_lo", "ci_hi", "n_pairs", "n_scenarios"])
+        return pd.DataFrame(columns=columns)
 
     df = pairwise_df.copy()
     df["class1_fine"] = df["p1"].map(DRIVER_CLASS_FINE)
     df["class2_fine"] = df["p2"].map(DRIVER_CLASS_FINE)
     intra = df[df["class1_fine"].notna() & (df["class1_fine"] == df["class2_fine"])].copy()
     if intra.empty:
-        return pd.DataFrame(columns=["bucket", "class", "p1", "p2", "mean_hausdorff", "ci_lo", "ci_hi", "n_pairs", "n_scenarios"])
+        return pd.DataFrame(columns=columns)
 
     rng = np.random.default_rng(ci_seed)
     rows = []
@@ -299,7 +300,7 @@ def within_class_pairs(pairwise_df: pd.DataFrame, n_bootstrap: int = 1000, ci_se
                     "n_scenarios": int(grp["scenario"].nunique()),
                 }
             )
-    return pd.DataFrame(rows).sort_values(["bucket", "class", "p1", "p2"]).reset_index(drop=True)
+    return pd.DataFrame(rows, columns=columns).sort_values(["bucket", "class", "p1", "p2"]).reset_index(drop=True)
 
 
 def headline(pairwise_df: pd.DataFrame, n_bootstrap: int = 1000, ci_seed: int = 0) -> pd.DataFrame:

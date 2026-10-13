@@ -156,7 +156,7 @@ sequences:
     steps: ...
 ```
 
-Values are plain numbers, not distributions. The tune is applied when the agent switches into the sequence, over the values sampled at spawn, and those values come back when it switches to a sequence without one or the tree stops. A sequence re-entering itself (`then`/`on_failure` to its own name) keeps it, so a looping sequence never drops back for a tick. A `transitions` entry into a sequence with the same `steps` (and `attention`) changes only the tune: the running step, and any interaction it holds, carries on. So a twin of every sequence with a `tune:`, entered on a stimulus need, retunes a live agent mid-episode without interrupting what it does. Unknown fields raise at load.
+Values are plain numbers. The tune is applied when the agent switches into the sequence, over the values sampled at spawn, and those values come back when it switches to a sequence without one or the tree stops. A sequence re-entering itself (`then`/`on_failure` to its own name) keeps it, so a looping sequence never drops back for a tick. A `transitions` entry into a sequence with the same `steps` (and `attention`) changes only the tune: the running step, and any interaction it holds, carries on. So a twin of every sequence with a `tune:`, entered on a stimulus need, retunes a live agent mid-episode without interrupting what it does. Unknown fields raise at load.
 
 ### Stimuli
 

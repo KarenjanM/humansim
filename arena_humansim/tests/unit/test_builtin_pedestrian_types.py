@@ -1,12 +1,12 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pytest
 from arena_humansim.core.agents import loader
-from arena_humansim.core.agents.types import (
-    AgentType,  # noqa: F401
-    sample_agent_type,
-)
+from arena_humansim.core.agents.types import AgentType, sample_agent_type
+from arena_humansim.utils.scenario_loader import converter
 
 KINEMATIC = ("adult", "elder", "child", "hurried", "distracted")
 FIELDS = (
@@ -21,21 +21,18 @@ FIELDS = (
 
 
 @pytest.fixture(scope="module")
-def types() -> dict[str, object]:
-    loaded = loader.load_agent_types()
-    missing = set(KINEMATIC) - set(loaded)
-    if missing:
-        pytest.skip(f"builtin types not on this install: {sorted(missing)}")
-    return loaded
+def types() -> dict[str, AgentType]:
+    raw = loader.load_agent_types_raw_from_dir(Path(loader.__file__).resolve().parents[3] / "config" / "agent_types")
+    resolved = loader.resolve_extends({name: r for name, (r, _) in raw.items()}, {})
+    return {name: converter.structure(r, AgentType) for name, r in resolved.items()}
 
 
-def test_every_kinematic_type_loads_as_simple_mode(types: dict[str, object]) -> None:
+def test_every_kinematic_type_loads_as_simple_mode(types: dict[str, AgentType]) -> None:
     for name in KINEMATIC:
         assert types[name].mode == "simple", name
 
 
-def test_extends_gives_every_type_the_full_field_set(types: dict[str, object]) -> None:
-    # A knob that lands on `adult` must land on every type derived from it.
+def test_extends_gives_every_type_the_full_field_set(types: dict[str, AgentType]) -> None:
     for name in KINEMATIC:
         t = types[name]
         for field in FIELDS:
@@ -44,7 +41,7 @@ def test_extends_gives_every_type_the_full_field_set(types: dict[str, object]) -
         assert {"relaxation_time", "repulsion_strength", "repulsion_range"} <= set(t.local_planner_params)
 
 
-def test_distributions_are_well_formed(types: dict[str, object]) -> None:
+def test_distributions_are_well_formed(types: dict[str, AgentType]) -> None:
     for name in KINEMATIC:
         t = types[name]
         for field in FIELDS:
@@ -53,7 +50,7 @@ def test_distributions_are_well_formed(types: dict[str, object]) -> None:
             assert d.std >= 0
 
 
-def test_the_types_differ_where_they_are_meant_to(types: dict[str, object]) -> None:
+def test_the_types_differ_where_they_are_meant_to(types: dict[str, AgentType]) -> None:
     radius = {n: types[n].agent_radius.mean for n in KINEMATIC}
     speed = {n: types[n].desired_velocity.mean for n in KINEMATIC}
     assert radius["child"] < radius["adult"]
@@ -61,7 +58,7 @@ def test_the_types_differ_where_they_are_meant_to(types: dict[str, object]) -> N
     assert types["distracted"].perception.vision_range.mean < types["adult"].perception.vision_range.mean
 
 
-def test_every_type_samples(types: dict[str, object]) -> None:
+def test_every_type_samples(types: dict[str, AgentType]) -> None:
     rng = np.random.default_rng(3)
     for name in KINEMATIC:
         p = sample_agent_type(types[name], rng)

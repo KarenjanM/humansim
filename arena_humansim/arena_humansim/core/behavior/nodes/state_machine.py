@@ -27,7 +27,6 @@ class SequenceStateMachine(py_trees.behaviour.Behaviour):
         self._im = im
         self._current_name: str = initial
         self._current_node: py_trees.behaviour.Behaviour = sequences[initial]
-        # the agent's params and speed from before the running sequence's `tune`; None while untuned
         self._untuned: tuple[SampledParams, float] | None = None
 
     def initialise(self) -> None:
@@ -39,7 +38,6 @@ class SequenceStateMachine(py_trees.behaviour.Behaviour):
     def update(self) -> py_trees.common.Status:
         redirect = self._check_transitions()
         if redirect is not None and redirect in self._sequences and self._only_retunes(redirect):
-            # same steps, other tune: the running step and any interaction it holds carry on
             self._retune(self._sequence_defs[redirect].tune)
             self._current_name = redirect
         elif redirect is not None:
@@ -107,7 +105,6 @@ class SequenceStateMachine(py_trees.behaviour.Behaviour):
         # would kick everyone out of a group conversation the moment it re-enters the seek step.
         if target != self._current_name and self._im is not None:
             self._im.force_stop(self._agent.state.agent_id, reason=InteractionOutcome.INTERRUPTED)
-        # after stop(), so a node restoring its own speed in terminate() restores the tuned one
         if target != self._current_name:
             self._retune(self._sequence_defs[target].tune)
         self._current_name = target

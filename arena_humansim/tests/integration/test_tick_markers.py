@@ -66,11 +66,12 @@ def test_tick_markers_skips_module_markers_without_a_subscriber(rclpy_context: o
         executor.add_node(mgr)
         settle(executor)
         _spawn_pair(mgr)
+        start = mgr._tick_count
 
         for _ in range(20):
             mgr.tick()
 
-        assert mgr._tick_count == 20
+        assert mgr._tick_count - start == 20
         assert not mgr._marker_pub.watched
         assert all(ns in _STATIC_NS for ns, _mid in mgr._marker_pub._scene)
         executor.remove_node(mgr)

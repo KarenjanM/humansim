@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import pytest
 
-from arena_humansim.core.agents.types import AttentionDef, AttentionStepDef, ChannelDef, ClipDef, GoToStepDef, Pose3, RelativeRef, RobotRef, StepDef
+from arena_humansim.core.agents import BaseAgent
+from arena_humansim.core.agents.types import AttentionDef, AttentionStepDef, ChannelDef, ClipDef, GoToStepDef, Pose3, RelativeRef, RobotRef, SequenceDef, StepDef, TuneDef
 from arena_humansim.utils.scenario import _structure_manual
+from arena_humansim.utils.scenario_loader import converter
 
 
 def _minimal(extra: dict | None = None) -> dict:
@@ -508,3 +512,20 @@ def test_attention_in_actions_raises() -> None:
 def test_unknown_step_kind_raises() -> None:
     with pytest.raises(ValueError, match="unknown step kind"):
         _step({"kind": "gesture", "gesture": "point", "at": "bench"})
+
+
+def test_sequence_tune_structures_and_applies_over_the_spawn_params(agent_factory: Callable[..., BaseAgent]) -> None:
+    tune = {"speed_scale": 2, "max_velocity": 2.6, "perception": {"vision_range": 2}, "local_planner_params": {"repulsion_strength": 0.5}}
+    seq = converter.structure({"steps": {}, "tune": tune}, SequenceDef)
+    assert seq.tune == TuneDef(speed_scale=2.0, max_velocity=2.6, perception={"vision_range": 2.0}, local_planner_params={"repulsion_strength": 0.5})
+    params = agent_factory(1, 0.0, 0.0).params
+    tuned, speed = seq.tune.apply(params, 1.2)
+    assert speed == pytest.approx(2.4)
+    assert (tuned.max_velocity, tuned.perception.vision_range, tuned.local_planner_params["repulsion_strength"]) == (2.6, 2.0, 0.5)
+    assert (tuned.perception.vision_fov, tuned.agent_radius) == (params.perception.vision_fov, params.agent_radius)
+
+
+@pytest.mark.parametrize(("tune", "match"), [({"speed_scal": 2.0}, "unknown tune fields"), ({"perception": {"vision_rang": 2.0}}, "unknown tune perception fields")])
+def test_sequence_tune_typo_raises(tune: dict, match: str) -> None:
+    with pytest.raises(ValueError, match=match):
+        converter.structure({"steps": {}, "tune": tune}, SequenceDef)

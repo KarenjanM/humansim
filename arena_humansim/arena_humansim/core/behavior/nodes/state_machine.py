@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import py_trees
 
-from arena_humansim.core.agents import BaseAgent, SequenceDef
+from arena_humansim.core.agents import BaseAgent, SampledParams, SequenceDef, TuneDef
 from arena_humansim.core.behavior.nodes.helpers import _bt_logger
 from arena_humansim.core.behavior.nodes.utility import preconditions_met
 from arena_humansim.core.interaction_manager import InteractionManager
@@ -27,15 +27,22 @@ class SequenceStateMachine(py_trees.behaviour.Behaviour):
         self._im = im
         self._current_name: str = initial
         self._current_node: py_trees.behaviour.Behaviour = sequences[initial]
+        # the agent's params and speed from before the running sequence's `tune`; None while untuned
+        self._untuned: tuple[SampledParams, float] | None = None
 
     def initialise(self) -> None:
         self._current_name = self._initial
         self._current_node = self._sequences[self._initial]
+        self._retune(self._sequence_defs[self._initial].tune)
         self._current_node.initialise()
 
     def update(self) -> py_trees.common.Status:
         redirect = self._check_transitions()
-        if redirect is not None:
+        if redirect is not None and redirect in self._sequences and self._only_retunes(redirect):
+            # same steps, other tune: the running step and any interaction it holds carry on
+            self._retune(self._sequence_defs[redirect].tune)
+            self._current_name = redirect
+        elif redirect is not None:
             return self._goto(redirect)
 
         self._current_node.tick_once()
@@ -58,6 +65,28 @@ class SequenceStateMachine(py_trees.behaviour.Behaviour):
     def terminate(self, new_status: py_trees.common.Status) -> None:
         self._current_node.terminate(new_status)
         self._clear_gestures()
+        self._retune(None)
+
+    def _only_retunes(self, target: str) -> bool:
+        here, there = self._sequence_defs[self._current_name], self._sequence_defs[target]
+        return target != self._current_name and bool(here.steps) and there.steps == here.steps and there.attention == here.attention
+
+    def _retune(self, tune: TuneDef | None) -> None:
+        """Hold `tune` over the untuned params, or put those back when `tune` is None."""
+        if tune is None and self._untuned is None:
+            return
+        agent = self._agent
+        if self._untuned is None:
+            self._untuned = (agent.params, agent.state.desired_velocity)
+        params, speed = self._untuned
+        if tune is None:
+            self._untuned = None
+        else:
+            params, speed = tune.apply(params, speed)
+        agent.params = params
+        agent.state.desired_velocity = speed
+        if isinstance(agent.movement, BehaviorTreeMovement):
+            agent.movement.retuned = True
 
     def _clear_gestures(self) -> None:
         mv = self._agent.movement
@@ -78,6 +107,9 @@ class SequenceStateMachine(py_trees.behaviour.Behaviour):
         # would kick everyone out of a group conversation the moment it re-enters the seek step.
         if target != self._current_name and self._im is not None:
             self._im.force_stop(self._agent.state.agent_id, reason=InteractionOutcome.INTERRUPTED)
+        # after stop(), so a node restoring its own speed in terminate() restores the tuned one
+        if target != self._current_name:
+            self._retune(self._sequence_defs[target].tune)
         self._current_name = target
         self._current_node = self._sequences[target]
         self._current_node.initialise()

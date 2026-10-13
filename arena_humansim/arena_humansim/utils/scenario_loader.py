@@ -26,6 +26,7 @@ from arena_humansim.core.agents.types import (
     SequenceDef,
     StepDef,
     TransitionDef,
+    TuneDef,
     VarDef,
     _as_paramdist,
 )
@@ -430,7 +431,28 @@ def _structure_sequence_def(val: object, _: type) -> SequenceDef:
         d["transitions"] = ()
     if d.get("attention") is not None:
         d["attention"] = _structure_attention_def(d["attention"])
+    if d.get("tune") is not None:
+        d["tune"] = _structure_tune_def(d["tune"])
     return SequenceDef(**d)
+
+
+def _structure_tune_def(val: object) -> TuneDef:
+    if isinstance(val, TuneDef):
+        return val
+    d = dict(val)
+    unknown = set(d) - {f.name for f in attrs.fields(TuneDef)}
+    if unknown:
+        raise ValueError(f"unknown tune fields: {sorted(unknown)}")
+    perception = {k: float(v) for k, v in dict(d.get("perception") or {}).items()}
+    unknown = set(perception) - {"vision_range", "vision_fov", "proximity_sense"}
+    if unknown:
+        raise ValueError(f"unknown tune perception fields: {sorted(unknown)}")
+    d["perception"] = perception
+    d["local_planner_params"] = {k: float(v) for k, v in dict(d.get("local_planner_params") or {}).items()}
+    for key in ("speed_scale", "desired_velocity", "max_velocity"):
+        if d.get(key) is not None:
+            d[key] = float(d[key])
+    return TuneDef(**d)
 
 
 converter.register_structure_hook(SequenceDef, _structure_sequence_def)

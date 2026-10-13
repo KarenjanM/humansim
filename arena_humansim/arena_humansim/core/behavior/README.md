@@ -45,6 +45,10 @@ A step with `patience: {mean: 5.0}` and a target 20 m away may fail during phase
 
 Cascade: step override > object override > per-`InteractionKind` default (see [../../core/interaction_kinds.py](../../core/interaction_kinds.py)) > `DISTANCE_TOLERANCE`. Full table and authoring examples in [../../../config/scenarios/README.md](../../../config/scenarios/README.md).
 
+## Sequence `tune`
+
+`SequenceStateMachine` owns a sequence's `tune:` (schema in [../../../config/agent_types/README.md](../../../config/agent_types/README.md#sequences)). It applies the tune in `_goto` after `stop()` on the outgoing sequence, so a node that restores its own speed in `terminate()` (`BlockNode`) restores the tuned one first; it skips the switch when a sequence re-enters itself; it restores the untuned params on leaving and in its own `terminate()`. A transition into a sequence with the same (non-empty) `steps` and `attention` only retunes: `update` swaps the name and the tune and keeps ticking the running step, with no `_goto`, so neither the step nor its interaction restarts. That is how a tuned twin of a sequence takes over mid-conversation. It writes `agent.params` and `state.desired_velocity` and sets `BehaviorTreeMovement.retuned`; the manager answers that flag in the decide phase with `AgentPool.update_agent`, which rewrites the pool row and calls `on_pool_update` on the pool extensions. Nodes must not write params themselves: a write in `update()` restored in `terminate()` drops back to the spawn value for a BT tick at every restart.
+
 ## Signals on `BehaviorTreeMovement`
 
 IM writes `interaction_id` and `last_outcome`; BT nodes read them. `ClearOutcomeNode` at the head of every compiled step resets them so stale signals don't short-circuit a re-entry. Full rules and outcome encoding in [nodes/README.md](nodes/README.md#authoring-rules).

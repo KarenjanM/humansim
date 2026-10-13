@@ -128,6 +128,9 @@ class ForcePlanner(LocalPlanner):
     def on_pool_add(self, idx: int, agent: BaseAgent) -> None:
         self._params[idx] = self._row(agent)
 
+    def on_pool_update(self, idx: int, agent: BaseAgent) -> None:
+        self.on_pool_add(idx, agent)
+
     def on_pool_swap(self, idx: int, last: int) -> None:
         self._params[idx] = self._params[last]
 

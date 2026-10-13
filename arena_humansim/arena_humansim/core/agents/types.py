@@ -235,6 +235,31 @@ class GoToStepDef:
 
 
 @attrs.frozen
+class TuneDef:
+    """Parameters a sequence holds on its agent while it runs, over the values sampled at spawn."""
+
+    speed_scale: float | None = None
+    desired_velocity: float | None = None
+    max_velocity: float | None = None
+    perception: dict[str, float] = attrs.Factory(dict)
+    local_planner_params: dict[str, float] = attrs.Factory(dict)
+
+    def apply(self, params: "SampledParams", speed: float) -> tuple["SampledParams", float]:
+        if self.desired_velocity is not None:
+            speed = self.desired_velocity
+        if self.speed_scale is not None:
+            speed *= self.speed_scale
+        changes: dict[str, object] = {}
+        if self.max_velocity is not None:
+            changes["max_velocity"] = self.max_velocity
+        if self.perception:
+            changes["perception"] = attrs.evolve(params.perception, **self.perception)
+        if self.local_planner_params:
+            changes["local_planner_params"] = {**params.local_planner_params, **self.local_planner_params}
+        return attrs.evolve(params, **changes), speed
+
+
+@attrs.frozen
 class SequenceDef:
     steps: dict[str, StepDef | GoToStepDef | AttentionStepDef]
     then: str | None = None
@@ -242,6 +267,7 @@ class SequenceDef:
     interruptible: bool = True
     transitions: tuple[TransitionDef, ...] = ()
     attention: AttentionDef | None = None
+    tune: TuneDef | None = None
 
 
 @attrs.frozen

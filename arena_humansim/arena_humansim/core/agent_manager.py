@@ -1434,6 +1434,10 @@ class AgentManager(Node):
 
             for agent_id, agent in self._agents.items():
                 mv = agent.movement
+                if isinstance(mv, BehaviorTreeMovement) and mv.retuned:
+                    mv.retuned = False
+                    if agent_id in pool._id_to_idx:
+                        pool.update_agent(agent)
                 if isinstance(mv, BehaviorTreeMovement) and mv.command is not None:
                     self._high_level_cmds[agent_id] = mv.command
 

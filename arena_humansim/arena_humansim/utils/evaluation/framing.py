@@ -3,18 +3,20 @@ import pandas as pd
 
 ABSTRACT_TEMPLATES = {
     "trifurcated": (
-        "Our primary calibration: classical drivers (SFM, HSFM, ORCA) reproduce each other within "
-        "{X_nav:.2f} m mean trajectory Hausdorff under pure navigation, while learned drivers "
-        "(NSP, SocialGAIL) diverge by {K_nav:.1f}x; the same comparison gives {K_bt:.1f}x under "
+        "Our primary calibration: drivers of one family (force, geometric, learned) reproduce each other within "
+        "{X_nav:.2f} m mean trajectory Hausdorff under pure navigation, while drivers "
+        "of different families diverge by {K_nav:.1f}x; the same comparison gives {K_bt:.1f}x under "
         "behavior-tree load and {K_het:.1f}x under heterogeneous-agent (mixed human + robot) load -- "
-        "driver class is a measurable axis of evaluation, and its effect amplifies through both "
+        "driver family is a measurable axis of evaluation, and its effect amplifies through both "
         "interaction-layer cascades and kinematic heterogeneity."
     ),
-    "nav+bt": ("Our primary calibration: classical drivers reproduce each other within {X_nav:.2f} m mean trajectory Hausdorff under pure navigation, while learned drivers diverge by {K_nav:.1f}x; this multiplier rises to {K_bt:.1f}x under behavior-tree load -- driver class cascades through the interaction layer."),
-    "nav+het": (
-        "Our primary calibration: classical drivers reproduce each other within {X_nav:.2f} m mean trajectory Hausdorff under pure navigation, while learned drivers diverge by {K_nav:.1f}x; this multiplier rises to {K_het:.1f}x under heterogeneous-agent load -- driver class amplifies under kinematic heterogeneity."
+    "nav+bt": (
+        "Our primary calibration: drivers of one family reproduce each other within {X_nav:.2f} m mean trajectory Hausdorff under pure navigation, while drivers of different families diverge by {K_nav:.1f}x; this multiplier rises to {K_bt:.1f}x under behavior-tree load -- driver family cascades through the interaction layer."
     ),
-    "pooled": ("Our primary calibration: classical drivers (SFM, HSFM, ORCA) reproduce each other within {X_pooled:.2f} m mean trajectory Hausdorff, while learned drivers (NSP, SocialGAIL) diverge by {K_pooled:.1f}x -- driver class is a measurable axis of evaluation."),
+    "nav+het": (
+        "Our primary calibration: drivers of one family reproduce each other within {X_nav:.2f} m mean trajectory Hausdorff under pure navigation, while drivers of different families diverge by {K_nav:.1f}x; this multiplier rises to {K_het:.1f}x under heterogeneous-agent load -- driver family amplifies under kinematic heterogeneity."
+    ),
+    "pooled": ("Our primary calibration: drivers of one family (force, geometric, learned) reproduce each other within {X_pooled:.2f} m mean trajectory Hausdorff, while drivers of different families diverge by {K_pooled:.1f}x -- driver family is a measurable axis of evaluation."),
 }
 
 

@@ -12,9 +12,6 @@ from arena_humansim.utils.evaluation.buckets import (
     DRIVER_CLASS_FINE,
     KNOWN_BUCKETS,
 )
-from arena_humansim.utils.evaluation.buckets import (
-    DRIVER_CLASS_FINE as DRIVER_CLASS,
-)
 from arena_humansim.utils.evaluation.framing import pick_framing, render_framing
 from arena_humansim.utils.evaluation.metrics import (
     calculate_kinematic_metrics,
@@ -182,9 +179,9 @@ def compute_pairwise_table(df: pd.DataFrame) -> pd.DataFrame:
                     "agent_id": agent_id,
                     "p1": p1,
                     "p2": p2,
-                    "class1": DRIVER_CLASS.get(p1, "unknown"),
-                    "class2": DRIVER_CLASS.get(p2, "unknown"),
-                    "same_class": DRIVER_CLASS.get(p1) == DRIVER_CLASS.get(p2),
+                    "class1": DRIVER_CLASS_FINE.get(p1, "unknown"),
+                    "class2": DRIVER_CLASS_FINE.get(p2, "unknown"),
+                    "same_class": DRIVER_CLASS_FINE.get(p1) == DRIVER_CLASS_FINE.get(p2),
                     "hausdorff": d,
                 }
             )

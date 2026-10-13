@@ -1,7 +1,6 @@
 from arena_humansim.local_planner import LocalPlanner
 
-# Fine-grained taxonomy used by the within-class redundancy table. Distinct from
-# DRIVER_CLASS, which the Sec.4.4 K_nav/K_bt headline binarizes as classical-vs-learned.
+# Driver families, the classes of the K headline and the within-class redundancy table
 DRIVER_CLASS_FINE = {name: info.family for name, info in LocalPlanner.info().items() if not info.robot_policy}
 
 DRIVER_CLASS = {name: "learned" if family == "learned" else "classical" for name, family in DRIVER_CLASS_FINE.items()}

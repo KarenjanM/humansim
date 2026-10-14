@@ -4,7 +4,7 @@ import array
 import math
 import time
 from collections import deque
-from collections.abc import Callable, Hashable, Iterable
+from collections.abc import Callable, Hashable, Iterable, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -19,8 +19,7 @@ from arena_humansim_msgs.msg import AgentStates as AgentStatesMsg
 from arena_humansim_msgs.msg import AgentViz as AgentVizMsg
 from arena_humansim_msgs.msg import Gesture as GestureMsg
 from arena_humansim_msgs.msg import InteractionEvent as InteractionEventMsg
-from arena_humansim_msgs.msg import Interactions as InteractionsMsg
-from arena_humansim_msgs.msg import InteractionStatus as InteractionStatusMsg
+from arena_humansim_msgs.msg import InteractionFrame as InteractionFrameMsg
 from arena_humansim_msgs.msg import ObstacleConfig as ObstacleConfigMsg
 from arena_humansim_msgs.msg import Shape as ShapeMsg
 from arena_humansim_msgs.msg import SinkConfig as SinkConfigMsg
@@ -199,6 +198,37 @@ def _flat(code: str, values: np.ndarray) -> array.array:
     out = array.array(code)
     out.frombytes(values.astype(_NP_TYPES[code]).tobytes())
     return out
+
+
+def _interaction_frame(header: Header, table: tuple[InteractionRow, ...], edges: Sequence[InteractionEdge] = ()) -> InteractionFrameMsg:
+    msg = InteractionFrameMsg(header=header)
+    offsets = [0]
+    members: list[int] = []
+    roles: list[int] = []
+    for row in table:
+        members.extend(row.participants)
+        members.extend(row.queue)
+        roles.extend([MembershipRole.PARTICIPANT] * len(row.participants))
+        roles.extend([MembershipRole.QUEUED] * len(row.queue))
+        offsets.append(len(members))
+    msg.interaction_id = array.array("i", [row.interaction_id for row in table])
+    msg.interaction_type = array.array("B", [row.interaction_type for row in table])
+    msg.outcome = array.array("B", [row.outcome for row in table])
+    msg.object_id = [row.object_id for row in table]
+    msg.arrived = [row.arrived for row in table]
+    msg.holding = [row.holding for row in table]
+    msg.duration = array.array("d", [row.duration for row in table])
+    msg.member_offset = array.array("I", offsets)
+    msg.member_id = array.array("i", members)
+    msg.member_role = array.array("B", roles)
+    for edge in edges:
+        event = InteractionEventMsg()
+        event.interaction_id = int(edge.interaction_id)
+        event.interaction_type = int(edge.interaction_type)
+        event.event = int(edge.edge)
+        event.participants = [int(p) for p in edge.participants]
+        msg.events.append(event)
+    return msg
 
 
 def _group_by[K: Hashable](agents: Iterable[BaseAgent], key: Callable[[BaseAgent], K]) -> Iterable[tuple[K, list[BaseAgent]]]:
@@ -482,6 +512,8 @@ class AgentManager(Node):
         self._meta_published: tuple | None = None
         self._gestures_dirty = True
         self._gestures_published: list[tuple[int, GestureIntent]] | None = None
+        self._interactions_published: tuple[InteractionRow, ...] | None = None
+        self._interactions_had_edges = False
         self._tick_phases: dict[str, float] = {}
         self._overrun_count: int = 0
         self._last_overrun_log: float = 0.0
@@ -505,11 +537,7 @@ class AgentManager(Node):
             QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE, durability=DurabilityPolicy.VOLATILE),
         )
 
-        self._interactions_pub = self.create_publisher(
-            InteractionsMsg,
-            "interactions",
-            QoSProfile(depth=50, reliability=ReliabilityPolicy.RELIABLE),
-        )
+        self._interactions_pub = self.create_publisher(InteractionFrameMsg, "interactions", _LATCHED_QOS)
 
         self._world_geometry_pub = self.create_publisher(
             WorldGeometryMsg,
@@ -1638,7 +1666,12 @@ class AgentManager(Node):
             self._publish_agent_meta(frame.header)
         if self._gestures_dirty or is_bt_tick:
             self._publish_agent_gestures(frame.header)
-        self._interactions_pub.publish(self._build_interactions_msg(interactions, frame.header))
+        edges = self._interaction_manager.drain_edges()
+        table = self._interaction_manager.membership_table()
+        if edges or self._interactions_had_edges or table != self._interactions_published:
+            self._interactions_published = table
+            self._interactions_had_edges = bool(edges)
+            self._interactions_pub.publish(_interaction_frame(frame.header, table, edges))
 
         if self._marker_pub is not None and self._publish_markers > 0:
             pool.sync_back(agents)
@@ -2551,36 +2584,6 @@ class AgentManager(Node):
             self._gesture_mode = gesture_mode
             self._gestures_dirty = True
         return SetParametersResult(successful=True)
-
-    def _build_interactions_msg(self, interactions: dict[int, InteractionState], header: Header) -> InteractionsMsg:
-        """Live interactions plus the lifecycle edges fired this tick, stamped like the agent states."""
-        im = self._interaction_manager
-        msg = InteractionsMsg()
-        msg.header = header
-        for iid in sorted(interactions):
-            interaction = interactions[iid]
-            if interaction.outcome not in (InteractionOutcome.FORMING, InteractionOutcome.ACTIVE):
-                continue
-            contract = interaction.contract
-            status = InteractionStatusMsg()
-            status.interaction_id = int(iid)
-            status.interaction_type = int(interaction.type)
-            status.outcome = int(interaction.outcome)
-            status.participants = [int(p) for p in interaction.participants]
-            status.queue = [int(q) for q in contract.queue]
-            status.arrived = im.all_arrived(interaction)
-            status.holding = im.is_holding(interaction)
-            status.hold_elapsed = float(contract.elapsed)
-            status.duration = float(contract.duration) if contract.duration is not None else -1.0
-            msg.interactions.append(status)
-        for edge in im.drain_edges():
-            event = InteractionEventMsg()
-            event.interaction_id = int(edge.interaction_id)
-            event.interaction_type = int(edge.interaction_type)
-            event.event = int(edge.edge)
-            event.participants = [int(p) for p in edge.participants]
-            msg.events.append(event)
-        return msg
 
     def _spawn_agents_callback(
         self,

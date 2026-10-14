@@ -3,7 +3,7 @@ from __future__ import annotations
 import enum
 import math
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 import attrs
 import numpy as np
@@ -97,6 +97,18 @@ class InteractionEdge:
     interaction_type: int
     edge: LifecycleEdge
     participants: tuple[int, ...]
+
+
+class InteractionRow(NamedTuple):
+    interaction_id: int
+    interaction_type: int
+    outcome: int
+    object_id: str
+    participants: tuple[int, ...]
+    queue: tuple[int, ...]
+    arrived: bool
+    holding: bool
+    duration: float  # seconds, -1 = unbounded
 
 
 @njit(cache=True)
@@ -211,6 +223,28 @@ class InteractionManager(Loggable):
     def _restart_hold(self, interaction: InteractionState) -> None:
         interaction.state[_HOLDING] = False
         interaction.contract.elapsed = 0.0
+
+    def membership_table(self) -> tuple[InteractionRow, ...]:
+        """One row per FORMING or ACTIVE interaction, sorted by id, participants then the queue in FIFO order."""
+        rows = []
+        for iid, interaction in sorted(self.interactions.items()):
+            if interaction.outcome not in (InteractionOutcome.FORMING, InteractionOutcome.ACTIVE):
+                continue
+            contract = interaction.contract
+            rows.append(
+                InteractionRow(
+                    iid,
+                    int(interaction.type),
+                    int(interaction.outcome),
+                    interaction.object_id or "",
+                    tuple(interaction.participants),
+                    tuple(contract.queue),
+                    self.all_arrived(interaction),
+                    self.is_holding(interaction),
+                    float(contract.duration) if contract.duration is not None else -1.0,
+                )
+            )
+        return tuple(rows)
 
     def _warmup(self) -> None:
         _nearest_peer(np.zeros((2, 2)), np.array([0, 2], dtype=np.int64))

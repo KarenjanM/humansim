@@ -128,11 +128,16 @@ def test_solo_forming_interaction_emits_nothing_on_teardown() -> None:
     assert _edges(mgr) == []
 
 
-def test_reset_drops_pending_edges() -> None:
+def test_reset_cancels_live_interactions() -> None:
     agents = _pair()
     mgr = _mgr(agents)
     mgr.update(_seek(agents, InteractionType.HUG), dt=DT)
+    iid = next(iter(mgr.interactions))
     mgr.reset()
+    edges = mgr.drain_edges()
+    assert [e.edge for e in edges] == [LifecycleEdge.ACTIVATED, LifecycleEdge.CANCELED]
+    assert edges[1].interaction_id == iid and set(edges[1].participants) == {1, 2}
+    assert not mgr.interactions
     assert _edges(mgr) == []
 
 

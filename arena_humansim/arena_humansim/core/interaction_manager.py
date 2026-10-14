@@ -213,6 +213,9 @@ class InteractionManager(Loggable):
         """Drop all interaction state between episodes. Clearing `interactions` alone leaves
         dangling ids in the indices the scan helpers walk; `next_interaction_id` stays monotonic
         so ids remain unique across episodes."""
+        for interaction in self.interactions.values():
+            if interaction.outcome == InteractionOutcome.ACTIVE:
+                self._emit(interaction, LifecycleEdge.CANCELED)
         self.interactions.clear()
         self._agent_membership.clear()
         self._interaction_by_object_type.clear()
@@ -221,7 +224,6 @@ class InteractionManager(Loggable):
         self._formation_speeds.clear()
         self._formation_dt = 0.0
         self._current_departed.clear()
-        self._edges.clear()
 
     def set_context(
         self,

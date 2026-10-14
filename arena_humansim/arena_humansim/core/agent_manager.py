@@ -77,8 +77,8 @@ from arena_humansim.core.animation_kinds import locomotion_states
 from arena_humansim.core.behavior.compiler import BehaviorTreeFactory
 from arena_humansim.core.despawn_monitor import DespawnMonitor
 from arena_humansim.core.formation.clearance import Clearance
-from arena_humansim.core.interaction_kinds import InteractionType
-from arena_humansim.core.interaction_manager import CONTACT_ENABLED, DEFAULT_STANDING_DISTANCE, GESTURE_ENABLED, GESTURE_MODES, InteractionManager
+from arena_humansim.core.interaction_kinds import InteractionType, MembershipRole
+from arena_humansim.core.interaction_manager import CONTACT_ENABLED, DEFAULT_STANDING_DISTANCE, GESTURE_ENABLED, InteractionEdge, InteractionManager, InteractionRow, check_gesture_mode
 from arena_humansim.core.locomotion import LocomotionExtension
 from arena_humansim.core.logger import SimulationLogger
 from arena_humansim.core.pool import KIND_ROBOT, AgentPool, PoolAware
@@ -400,7 +400,7 @@ class AgentManager(Node):
             str(self.get_parameter("contact_mode").value),
             float(self.get_parameter("locomotion_standing_distance").value),
         )
-        self._gesture_mode = str(self.get_parameter("gesture_mode").value)
+        self._gesture_mode = check_gesture_mode(str(self.get_parameter("gesture_mode").value))
         self.add_on_set_parameters_callback(self._on_contact_params)
         self._animation = MotionAnimation.create(
             self._module_selections["animation"],
@@ -2542,9 +2542,8 @@ class AgentManager(Node):
                 distance = float(p.value)
             elif p.name == "gesture_mode":
                 gesture_mode = str(p.value)
-        if gesture_mode not in GESTURE_MODES:
-            return SetParametersResult(successful=False, reason=f"gesture_mode must be one of {GESTURE_MODES}, got {gesture_mode!r}")
         try:
+            check_gesture_mode(gesture_mode)
             self._interaction_manager.set_contact_mode(mode, distance)
         except ValueError as e:
             return SetParametersResult(successful=False, reason=str(e))

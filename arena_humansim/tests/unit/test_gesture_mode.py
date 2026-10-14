@@ -10,7 +10,7 @@ pytest.importorskip("rclpy")
 from rclpy.parameter import Parameter
 
 from arena_humansim.core.agent_manager import AgentManager
-from arena_humansim.core.interaction_manager import CONTACT_ENABLED, GESTURE_DISABLED, GESTURE_ENABLED
+from arena_humansim.core.interaction_manager import CONTACT_ENABLED, GESTURE_DISABLED, GESTURE_ENABLED, check_gesture_mode
 
 
 class _InteractionManager:
@@ -58,3 +58,8 @@ def test_unrelated_parameters_pass_through() -> None:
     assert _set(node, contact_mode=CONTACT_ENABLED, locomotion_standing_distance=1.2).successful
     assert node._gesture_mode == GESTURE_ENABLED
 
+
+def test_check_gesture_mode_passes_known_and_rejects_unknown() -> None:
+    assert check_gesture_mode(GESTURE_DISABLED) == GESTURE_DISABLED
+    with pytest.raises(ValueError, match="gesture_mode"):
+        check_gesture_mode("off")

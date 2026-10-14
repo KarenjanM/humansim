@@ -85,6 +85,12 @@ GESTURE_MODES = (GESTURE_ENABLED, GESTURE_DISABLED)
 DEFAULT_STANDING_DISTANCE = 1.2
 
 
+def check_gesture_mode(mode: str) -> str:
+    if mode not in GESTURE_MODES:
+        raise ValueError(f"gesture_mode must be one of {GESTURE_MODES}, got {mode!r}")
+    return mode
+
+
 @attrs.frozen
 class InteractionEdge:
     interaction_id: int

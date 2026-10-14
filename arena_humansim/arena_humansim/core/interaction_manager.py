@@ -56,7 +56,7 @@ _ENDED_OUTCOMES: frozenset[int] = frozenset(
 
 _UNSET: Any = object()
 
-_HOLDING = "_holding"  # interaction.state key
+_HOLDING = "_holding"
 
 
 class LifecycleEdge(enum.IntEnum):

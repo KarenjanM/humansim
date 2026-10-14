@@ -103,7 +103,6 @@ def test_release_fires_after_the_hold_duration() -> None:
             ticks_to_release = k
             break
     assert seen == [LifecycleEdge.ACTIVATED, LifecycleEdge.HOLD_ONSET, LifecycleEdge.RELEASED]
-    # the onset tick counts the first dt, so the release lands duration/dt ticks after it
     assert ticks_to_release == pytest.approx(0.5 / DT - 1, abs=1)
     assert not mgr.interactions
 
@@ -217,7 +216,7 @@ def test_non_contact_kinds_ignore_the_contact_mode() -> None:
     mgr.update(_seek(agents, InteractionType.TALK_TO), dt=DT)
     a, b = mgr.formation_target(1), mgr.formation_target(2)
     assert a is not None and b is not None
-    assert abs(b.x - a.x) == pytest.approx(1.2)  # the dyad default
+    assert abs(b.x - a.x) == pytest.approx(1.2)
 
 
 def test_bad_contact_mode_is_rejected() -> None:

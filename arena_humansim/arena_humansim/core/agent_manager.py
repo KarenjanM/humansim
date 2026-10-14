@@ -539,7 +539,7 @@ class AgentManager(Node):
             QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE, durability=DurabilityPolicy.VOLATILE),
         )
 
-        self._interactions_pub = self.create_publisher(InteractionFrameMsg, "interactions", _LATCHED_QOS)
+        self._interactions_pub = self.create_publisher(InteractionFrameMsg, "interactions", QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE, durability=DurabilityPolicy.TRANSIENT_LOCAL))
 
         self._world_geometry_pub = self.create_publisher(
             WorldGeometryMsg,

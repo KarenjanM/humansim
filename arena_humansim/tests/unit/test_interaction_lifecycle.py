@@ -15,7 +15,7 @@ from arena_humansim.core.interaction_manager import (
     InteractionManager,
     LifecycleEdge,
 )
-from arena_humansim.core.world_knowledge import WorldKnowledge
+from arena_humansim.core.world_knowledge import WorldKnowledge, WorldObject
 from arena_humansim.utils.rng import RNG
 from arena_humansim.utils.types import BehaviorTreeMovement, CommandType, HighLevelCommand, Pose2D, SeekSpec
 
@@ -140,6 +140,41 @@ def test_reset_cancels_live_interactions() -> None:
     assert edges[1].interaction_id == iid and set(edges[1].participants) == {1, 2}
     assert not mgr.interactions
     assert _edges(mgr) == []
+
+
+def test_promoted_customer_gets_its_own_hold() -> None:
+    agents = {1: _FakeAgent(_FakeState(agent_id=1, pose=Pose2D(x=1.0))), 2: _FakeAgent(_FakeState(agent_id=2, pose=Pose2D(x=2.0))), 3: _FakeAgent(_FakeState(agent_id=3, pose=Pose2D(x=10.0)))}
+    world = WorldKnowledge()
+    world.add_object(WorldObject(object_id="counter", type="counter", pose=Pose2D()))
+    mgr = InteractionManager(RNG(0))
+    mgr.set_context(world_knowledge=world, agent_lookup=agents.get, visibility_lookup=lambda aid: set(agents) - {aid})
+    spec = SeekSpec(interaction_type=InteractionType.QUEUE_USE, target="counter", max_participants=2, duration=1.0)
+    mgr.update({1: HighLevelCommand(agent_id=1, type=CommandType.SEEK, spec=spec)}, dt=DT)
+    mgr.update({2: HighLevelCommand(agent_id=2, type=CommandType.SEEK, spec=spec)}, dt=DT)
+    mgr.update({3: HighLevelCommand(agent_id=3, type=CommandType.SEEK, spec=spec)}, dt=DT)
+    iid = next(iter(mgr.interactions))
+    interaction = mgr.interactions[iid]
+    assert interaction.participants == [1, 2] and interaction.contract.queue == [3]
+    _move_to_slots(mgr, {aid: agents[aid] for aid in (1, 2)})
+    mgr.drain_edges()
+    for _ in range(3):
+        mgr.update({}, dt=DT)
+    assert _edges(mgr) == [LifecycleEdge.HOLD_ONSET]
+    assert interaction.contract.elapsed == pytest.approx(3 * DT)
+
+    mgr.stop(2, iid)
+    assert not mgr.is_holding(interaction)
+    assert interaction.contract.elapsed == 0.0
+    mgr.update({}, dt=DT)
+    assert interaction.participants == [1, 3] and not interaction.contract.queue
+    assert _edges(mgr) == [] and not mgr.is_holding(interaction)
+
+    _move_to_slots(mgr, {aid: agents[aid] for aid in (1, 3)})
+    mgr.update({}, dt=DT)
+    edges = mgr.drain_edges()
+    assert [e.edge for e in edges] == [LifecycleEdge.HOLD_ONSET]
+    assert set(edges[0].participants) == {1, 3}
+    assert interaction.contract.elapsed == pytest.approx(DT)
 
 
 @pytest.mark.parametrize("itype, contact_sep", [(InteractionType.HUG, 0.3), (InteractionType.SHAKE_HAND, 0.8)])

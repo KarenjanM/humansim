@@ -202,6 +202,10 @@ class InteractionManager(Loggable):
     def is_holding(self, interaction: InteractionState) -> bool:
         return bool(interaction.state.get(_HOLDING))
 
+    def _restart_hold(self, interaction: InteractionState) -> None:
+        interaction.state[_HOLDING] = False
+        interaction.contract.elapsed = 0.0
+
     def _warmup(self) -> None:
         _nearest_peer(np.zeros((2, 2)), np.array([0, 2], dtype=np.int64))
 
@@ -327,6 +331,8 @@ class InteractionManager(Loggable):
                 self._on_formation_join(interaction, agent_id)
                 return True
             self._add_membership(agent_id, interaction_id, MembershipRole.PARTICIPANT)
+            if interaction.outcome == InteractionOutcome.ACTIVE:
+                self._restart_hold(interaction)
             self._maybe_activate(interaction)
             self._update_bt_movement(agent_id, interaction_id=interaction_id)
             self._on_formation_join(interaction, agent_id)
@@ -402,6 +408,8 @@ class InteractionManager(Loggable):
         if len(interaction.participants) < contract.min_participants:
             self._teardown(interaction_id, reason, members)
             return None
+        if was_participant and interaction.outcome == InteractionOutcome.ACTIVE:
+            self._restart_hold(interaction)
         return interaction
 
     def update(
@@ -615,6 +623,7 @@ class InteractionManager(Loggable):
                 for next_agent in promoted:
                     self._add_membership(next_agent, interaction.id, MembershipRole.PARTICIPANT)
                 if promoted:
+                    self._restart_hold(interaction)
                     self._maybe_activate(interaction)
                     for next_agent in promoted:
                         self._update_bt_movement(next_agent, interaction_id=interaction.id)
@@ -628,6 +637,7 @@ class InteractionManager(Loggable):
                 interaction.participants.append(next_agent)
                 contract.current_participants.append(next_agent)
                 self._add_membership(next_agent, interaction.id, MembershipRole.PARTICIPANT)
+                self._restart_hold(interaction)
                 self._maybe_activate(interaction)
                 self._update_bt_movement(next_agent, interaction_id=interaction.id)
                 self._on_formation_join(interaction, next_agent)

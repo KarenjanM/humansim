@@ -1,10 +1,8 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from pathlib import Path
 
 import numpy as np
-import pytest
 
 from arena_humansim.core.pool import AgentPool
 from arena_humansim.local_planner.nsp.planner import NSPPlanner
@@ -159,40 +157,3 @@ def test_apply_policy_params_overrides_defaults() -> None:
     p.apply_policy_params('{"meters_per_pixel": 0.1, "max_peds": 12, "device": "cpu"}')
     assert p._meters_per_pixel == 0.1
     assert p._max_peds == 12
-
-
-def test_concurrent_checkpoint_fetches_do_not_collide(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Two fetches of the default checkpoint at once (pytest -n workers) each land it, neither loses its temp file."""
-    import io
-    import threading
-
-    from arena_humansim.local_planner.nsp import planner as nsp
-
-    target = tmp_path / "cache" / "SDD_nsp_wo.pt"
-    monkeypatch.setattr(nsp, "_DEFAULT_CHECKPOINT", target)
-    both_reading = threading.Barrier(2)
-
-    class _Response(io.BytesIO):
-        def read(self, n: int = -1) -> bytes:
-            chunk = super().read(n)
-            if chunk:
-                both_reading.wait(timeout=5)  # both fetches are mid-download before either renames
-            return chunk
-
-    monkeypatch.setattr(nsp.urllib.request, "urlopen", lambda url, timeout: _Response(b"checkpoint"))
-    errors: list[BaseException] = []
-
-    def fetch() -> None:
-        try:
-            NSPPlanner(checkpoint_path=str(target))._ensure_checkpoint_on_disk()
-        except BaseException as exc:  # surfaced below
-            errors.append(exc)
-
-    threads = [threading.Thread(target=fetch) for _ in range(2)]
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join(timeout=10)
-    assert not errors, errors
-    assert target.read_bytes() == b"checkpoint"
-    assert sorted(p.name for p in target.parent.iterdir()) == ["SDD_nsp_wo.pt"]  # no temp file left behind

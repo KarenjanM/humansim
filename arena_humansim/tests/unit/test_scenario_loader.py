@@ -193,6 +193,20 @@ def test_symmetric_with_target_raises() -> None:
         _structure_manual(_with_step({"interaction": "TALK_TO", "target": "someone"}))
 
 
+def test_contact_seeker_formation_spec_loads_without_offer() -> None:
+    spec = {"type": "dyad", "anchor_kind": "centroid", "params": {"separation": 0.8}}
+    scn = _structure_manual(_with_step({"interaction": "SHAKE_HAND", "formation_spec": spec}))
+    loaded = scn.agent_types["walker"].sequences["default"].steps["step"].formation_spec
+    assert loaded.type == "dyad"
+    assert loaded.params["separation"] == 0.8
+
+
+def test_non_contact_seeker_formation_spec_raises() -> None:
+    spec = {"type": "dyad", "anchor_kind": "centroid", "params": {"separation": 0.8}}
+    with pytest.raises(ValueError, match="provider-side configuration"):
+        _structure_manual(_with_step({"interaction": "TALK_TO", "formation_spec": spec}))
+
+
 def test_block_with_valid_target_agent_loads() -> None:
     data = _minimal(
         {

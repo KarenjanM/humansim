@@ -10,6 +10,7 @@ import yaml
 from arena_humansim_msgs.msg import AgentFrame as AgentFrameMsg
 from arena_humansim_msgs.msg import AgentGestures as AgentGesturesMsg
 from arena_humansim_msgs.msg import AgentMeta as AgentMetaMsg
+from arena_humansim_msgs.msg import InteractionFrame as InteractionFrameMsg
 from arena_humansim_msgs.msg import WorldGeometry as WorldGeometryMsg
 from rclpy.clock import Clock as RclClock
 from rclpy.clock import ClockType
@@ -73,6 +74,7 @@ class BagRecorder:
             ("agent_states", "arena_humansim_msgs/msg/AgentFrame", AgentFrameMsg, QoSProfile(depth=10)),
             ("agent_meta", "arena_humansim_msgs/msg/AgentMeta", AgentMetaMsg, latched),
             ("agent_gestures", "arena_humansim_msgs/msg/AgentGestures", AgentGesturesMsg, latched),
+            ("interactions", "arena_humansim_msgs/msg/InteractionFrame", InteractionFrameMsg, latched),
             ("world_geometry", "arena_humansim_msgs/msg/WorldGeometry", WorldGeometryMsg, latched),
             ("/clock", "rosgraph_msgs/msg/Clock", Clock, QoSProfile(depth=10)),
         ]
@@ -159,7 +161,7 @@ class BagRecorder:
         self._first_policies = {int(a): policies[p] if 0 <= p < len(policies) else "" for a, p in zip(ids, pidx, strict=True)}
         self._write_manifest()
 
-    def _write(self, topic_name: str, msg: AgentFrameMsg | AgentMetaMsg | AgentGesturesMsg | WorldGeometryMsg | Clock) -> None:
+    def _write(self, topic_name: str, msg: AgentFrameMsg | AgentMetaMsg | AgentGesturesMsg | InteractionFrameMsg | WorldGeometryMsg | Clock) -> None:
         if self._closed:
             return
         if isinstance(msg, Clock):

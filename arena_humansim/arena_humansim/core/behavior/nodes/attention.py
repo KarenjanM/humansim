@@ -12,10 +12,9 @@ from arena_humansim.core.agents.types import ATTENTION_KEYWORDS, CHANNEL_SLOTS, 
 from arena_humansim.core.behavior.nodes.helpers import _bt_logger, _nav_command, _sample_param_dist
 from arena_humansim.core.behavior.reach import MIN_RESIDENCE_S, reachable
 from arena_humansim.core.behavior.step_context import StepContext
-from arena_humansim.core.interaction_kinds import InteractionType
 from arena_humansim.core.pool import KIND_ROBOT
 from arena_humansim.core.world_knowledge import WorldKnowledge
-from arena_humansim.utils.types import BehaviorTreeMovement, CommandType, GestureIntent, Pose2D, WaypointMovement
+from arena_humansim.utils.types import BehaviorTreeMovement, CommandType, GestureIntent, InteractionState, Pose2D, WaypointMovement
 
 FACE_ENTER_RAD = 0.25
 FACE_KEEP_RAD = 0.6
@@ -416,14 +415,18 @@ class AttentionNode(py_trees.behaviour.Behaviour):
         if mv is not None and self._att.posture:
             mv.posture = posture
 
-    def _clip_render_target(self) -> tuple[float, float] | None:
-        """Formation slot xy when the bound interaction kind renders on its formation target."""
+    def _bound_interaction(self) -> InteractionState | None:
         mv = self._bt_mv()
         im = self._ctx.im
         if mv is None or mv.interaction_id is None or im is None:
             return None
-        interaction = im.interactions.get(mv.interaction_id)
-        if interaction is None or not InteractionType(interaction.type).kind.render_pose_override:
+        return im.interactions.get(mv.interaction_id)
+
+    def _clip_render_target(self) -> tuple[float, float] | None:
+        """Formation slot xy while the bound contact interaction is shown touching."""
+        interaction = self._bound_interaction()
+        im = self._ctx.im
+        if interaction is None or im is None or not im.shows_contact(interaction):
             return None
         target = im.formation_target(self._agent.state.agent_id)
         return None if target is None else (target.x, target.y)
@@ -433,6 +436,11 @@ class AttentionNode(py_trees.behaviour.Behaviour):
         if clip is None:
             return
         if clip.when == "bound" and not self._bound():
+            self._clip_published = None
+            return
+        interaction = self._bound_interaction()
+        im = self._ctx.im
+        if interaction is not None and im is not None and im.is_contact(interaction) and not im.shows_contact(interaction):
             self._clip_published = None
             return
         xy = self._clip_render_target()

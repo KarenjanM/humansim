@@ -3,7 +3,6 @@ from __future__ import annotations
 from collections.abc import Callable
 
 import numpy as np
-import pytest
 
 from arena_humansim.core.pool import AgentPool
 from arena_humansim.local_planner.nsp.planner import NSPPlanner

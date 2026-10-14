@@ -19,6 +19,8 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/FlowConfig.msg"
   "msg/HighLevelCommand.msg"
   "msg/InteractionContract.msg"
+  "msg/InteractionEvent.msg"
+  "msg/InteractionFrame.msg"
   "msg/ObstacleConfig.msg"
   "msg/PerceptionEvent.msg"
   "msg/PerceptionEvents.msg"

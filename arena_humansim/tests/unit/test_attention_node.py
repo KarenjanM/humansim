@@ -26,7 +26,7 @@ from arena_humansim.core.behavior.nodes.attention import (
 from arena_humansim.core.behavior.reach import ARM_IN, ARM_OUT, HEAD_IN, HEAD_OUT, MIN_RESIDENCE_S, reachable
 from arena_humansim.core.behavior.step_context import StepContext
 from arena_humansim.core.interaction_kinds import InteractionType
-from arena_humansim.core.interaction_manager import InteractionManager
+from arena_humansim.core.interaction_manager import CONTACT_LOCOMOTION_ONLY, InteractionManager
 from arena_humansim.core.pool import KIND_ROBOT
 from arena_humansim.core.world_knowledge import WorldKnowledge, WorldObject
 from arena_humansim.utils.rng import RNG
@@ -881,32 +881,47 @@ def test_clip_when_bound_waits_for_the_interaction(agent_factory: Callable[..., 
     assert _mv(agent).gestures == ()
 
 
-def test_hug_clip_publishes_render_pose_override(agent_factory: Callable[..., BaseAgent], world: WorldKnowledge, rng_np: np.random.Generator) -> None:
+def _hold(mgr: InteractionManager, agents: dict[int, BaseAgent]) -> None:
+    """Walk every participant onto its formation slot and tick the manager so the hold latches."""
+    for aid, agent in agents.items():
+        target = mgr.formation_target(aid)
+        assert target is not None
+        agent.state.pose = Pose2D(x=target.x, y=target.y, theta=target.theta)
+    mgr.update({})
+
+
+@pytest.mark.parametrize("itype, clip", [(InteractionType.HUG, "hug"), (InteractionType.SHAKE_HAND, "shake_hand")])
+def test_contact_clip_publishes_render_pose_override_once_holding(agent_factory: Callable[..., BaseAgent], world: WorldKnowledge, rng_np: np.random.Generator, itype: InteractionType, clip: str) -> None:
     a = _bt_agent(agent_factory, agent_id=1, x=0.0, y=0.0)
     b = _bt_agent(agent_factory, agent_id=2, x=2.0, y=0.0)
     agents = {1: a, 2: b}
-    mgr = _bind(agents, InteractionType.HUG)
+    mgr = _bind(agents, itype)
+    node = _node(a, _att(clip=_clip(clip, when="bound")), world, rng_np, agents=agents, ctx=StepContext(im=mgr, is_bound_lookup=mgr.is_bound))
+    assert _tick(node) == RUNNING
+    assert "body" not in _slots(a)
+    _hold(mgr, agents)
+    assert _tick(node) == RUNNING
+    target = mgr.formation_target(1)
+    assert target is not None
+    body = _slots(a)["body"]
+    assert body.clip == clip
+    assert body.render_pose_override is True
+    assert (body.x, body.y) == pytest.approx((target.x, target.y))
+
+
+def test_locomotion_only_contact_never_publishes_the_clip(agent_factory: Callable[..., BaseAgent], world: WorldKnowledge, rng_np: np.random.Generator) -> None:
+    a = _bt_agent(agent_factory, agent_id=1, x=0.0, y=0.0)
+    b = _bt_agent(agent_factory, agent_id=2, x=2.0, y=0.0)
+    agents = {1: a, 2: b}
+    mgr = InteractionManager(RNG(0))
+    mgr.set_contact_mode(CONTACT_LOCOMOTION_ONLY)
+    mgr.set_context(world_knowledge=WorldKnowledge(), agent_lookup=lambda aid: agents.get(aid), visibility_lookup=lambda aid: set(agents) - {aid})
+    mgr.update({aid: HighLevelCommand(agent_id=aid, type=CommandType.SEEK, spec=SeekSpec(interaction_type=InteractionType.HUG)) for aid in agents})
     node = _node(a, _att(clip=_clip("hug", when="bound")), world, rng_np, agents=agents, ctx=StepContext(im=mgr, is_bound_lookup=mgr.is_bound))
+    _hold(mgr, agents)
+    assert mgr.is_holding(next(iter(mgr.interactions.values())))
     assert _tick(node) == RUNNING
-    target = mgr.formation_target(1)
-    assert target is not None
-    body = _slots(a)["body"]
-    assert body.render_pose_override is True
-    assert (body.x, body.y) == pytest.approx((target.x, target.y))
-
-
-def test_shake_hand_clip_publishes_render_pose_override(agent_factory: Callable[..., BaseAgent], world: WorldKnowledge, rng_np: np.random.Generator) -> None:
-    a = _bt_agent(agent_factory, agent_id=1, x=0.0, y=0.0)
-    b = _bt_agent(agent_factory, agent_id=2, x=2.0, y=0.0)
-    agents = {1: a, 2: b}
-    mgr = _bind(agents, InteractionType.SHAKE_HAND)
-    node = _node(a, _att(clip=_clip("shake_hand", when="bound")), world, rng_np, agents=agents, ctx=StepContext(im=mgr, is_bound_lookup=mgr.is_bound))
-    assert _tick(node) == RUNNING
-    target = mgr.formation_target(1)
-    assert target is not None
-    body = _slots(a)["body"]
-    assert body.render_pose_override is True
-    assert (body.x, body.y) == pytest.approx((target.x, target.y))
+    assert "body" not in _slots(a)
 
 
 def test_non_contact_clip_does_not_publish_render_pose_override(agent_factory: Callable[..., BaseAgent], world: WorldKnowledge, rng_np: np.random.Generator) -> None:

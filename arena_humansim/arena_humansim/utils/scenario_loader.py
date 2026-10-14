@@ -334,6 +334,8 @@ def _structure_step_def(val: object, _: type) -> StepDef:
         raise ValueError(f"'offer: true' is not valid for interaction={interaction!r}")
     provider_fields = ("queueable", "min_participants", "max_participants", "formation_spec")
     for pf in provider_fields:
+        if pf == "formation_spec" and kind is not None and kind.render_pose_override:
+            continue
         if pf in d and d[pf] is not None and not offer:
             raise ValueError(f"step field {pf!r} is provider-side configuration; requires 'offer: true'")
     if kind is not None and not d.get("cancel", False):

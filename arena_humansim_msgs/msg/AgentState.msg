@@ -26,3 +26,4 @@ string policy_params         # opaque JSON blob for planner
 
 string handedness            # l | r, empty = right
 Gesture[] gestures           # active attention channels
+

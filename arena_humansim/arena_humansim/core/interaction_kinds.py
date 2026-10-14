@@ -270,7 +270,7 @@ def _registry() -> dict[InteractionType, InteractionKind]:
             label="SHAKE",
             handle=_SYMMETRIC_HANDLE,
             contract_defaults=ContractDefaults(min_participants=2, max_participants=2, queueable=False),
-            formation_default=_fs("dyad", AnchorKind.CENTROID, {"separation": 0.6}),
+            formation_default=_fs("dyad", AnchorKind.CENTROID, {"separation": 0.8}),
             interaction_radius=0.3,
             clip="shake_hand",
             render_pose_override=True,

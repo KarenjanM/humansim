@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import enum
 import math
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 import attrs
 import numpy as np
@@ -54,6 +55,60 @@ _ENDED_OUTCOMES: frozenset[int] = frozenset(
 )
 
 _UNSET: Any = object()
+
+_HOLDING = "_holding"
+
+
+class LifecycleEdge(enum.IntEnum):
+    """Mirrors arena_humansim_msgs/InteractionEvent."""
+
+    ACTIVATED = 0
+    HOLD_ONSET = 1
+    RELEASED = 2
+    INTERRUPTED = 3
+    CANCELED = 4
+
+
+_TERMINAL_EDGES: dict[int, LifecycleEdge] = {
+    int(InteractionOutcome.COMPLETED): LifecycleEdge.RELEASED,
+    int(InteractionOutcome.INTERRUPTED): LifecycleEdge.INTERRUPTED,
+    int(InteractionOutcome.CANCELED): LifecycleEdge.CANCELED,
+}
+
+
+CONTACT_ENABLED = "enabled"
+CONTACT_LOCOMOTION_ONLY = "locomotion_only"
+CONTACT_MODES = (CONTACT_ENABLED, CONTACT_LOCOMOTION_ONLY)
+GESTURE_ENABLED = "enabled"
+GESTURE_DISABLED = "disabled"
+GESTURE_MODES = (GESTURE_ENABLED, GESTURE_DISABLED)
+DEFAULT_STANDING_DISTANCE = 1.2
+
+
+def check_gesture_mode(mode: str) -> str:
+    if mode not in GESTURE_MODES:
+        raise ValueError(f"gesture_mode must be one of {GESTURE_MODES}, got {mode!r}")
+    return mode
+
+
+@attrs.frozen
+class InteractionEdge:
+    interaction_id: int
+    interaction_type: int
+    edge: LifecycleEdge
+    participants: tuple[int, ...]
+
+
+class InteractionRow(NamedTuple):
+    interaction_id: int
+    interaction_type: int
+    outcome: int
+    object_id: str
+    participants: tuple[int, ...]
+    queue: tuple[int, ...]
+    arrived: bool
+    holding: bool
+    duration: float  # seconds, -1 = unbounded
 
 
 @njit(cache=True)
@@ -116,6 +171,80 @@ class InteractionManager(Loggable):
         self._clearance: Clearance | None = None
         self._warmup()
         self._current_departed: set[int] = set()
+        self._edges: list[InteractionEdge] = []
+        self._contact_mode = CONTACT_ENABLED
+        self._standing_distance = DEFAULT_STANDING_DISTANCE
+
+    def set_contact_mode(self, mode: str, standing_distance: float | None = None) -> None:
+        """Applies to contact interactions created from now on, live ones keep their formation."""
+        if mode not in CONTACT_MODES:
+            raise ValueError(f"contact mode {mode!r} not in {CONTACT_MODES}")
+        self._contact_mode = mode
+        if standing_distance is not None:
+            if standing_distance <= 0.0:
+                raise ValueError(f"standing distance must be positive, got {standing_distance}")
+            self._standing_distance = standing_distance
+
+    @property
+    def contact_mode(self) -> str:
+        return self._contact_mode
+
+    @staticmethod
+    def is_contact(interaction: InteractionState) -> bool:
+        return InteractionType(interaction.type).kind.render_pose_override
+
+    def shows_contact(self, interaction: InteractionState) -> bool:
+        """Contact clip and render override are shown: contact enabled and the pair is holding."""
+        return self.is_contact(interaction) and self._contact_mode == CONTACT_ENABLED and self.is_holding(interaction)
+
+    def _contact_params(self, interaction: InteractionState, formation_type: str, params: dict[str, Any]) -> dict[str, Any]:
+        if formation_type == "dyad" and self.is_contact(interaction) and self._contact_mode == CONTACT_LOCOMOTION_ONLY:
+            return {**params, "separation": self._standing_distance}
+        return params
+
+    def _emit(self, interaction: InteractionState, edge: LifecycleEdge, participants: list[int] | None = None) -> None:
+        members = interaction.participants if participants is None else participants
+        self._edges.append(InteractionEdge(interaction.id, interaction.type, edge, tuple(members)))
+
+    def drain_edges(self) -> list[InteractionEdge]:
+        """Lifecycle edges fired since the last drain, in firing order."""
+        edges, self._edges = self._edges, []
+        return edges
+
+    def all_arrived(self, interaction: InteractionState) -> bool:
+        formation = interaction.contract.formation
+        if formation is None or not interaction.participants:
+            return True
+        return all(formation.arrived(pid) for pid in interaction.participants)
+
+    def is_holding(self, interaction: InteractionState) -> bool:
+        return bool(interaction.state.get(_HOLDING))
+
+    def _restart_hold(self, interaction: InteractionState) -> None:
+        interaction.state[_HOLDING] = False
+        interaction.contract.elapsed = 0.0
+
+    def membership_table(self) -> tuple[InteractionRow, ...]:
+        """One row per FORMING or ACTIVE interaction, sorted by id, participants then the queue in FIFO order."""
+        rows = []
+        for iid, interaction in sorted(self.interactions.items()):
+            if interaction.outcome not in (InteractionOutcome.FORMING, InteractionOutcome.ACTIVE):
+                continue
+            contract = interaction.contract
+            rows.append(
+                InteractionRow(
+                    iid,
+                    int(interaction.type),
+                    int(interaction.outcome),
+                    interaction.object_id or "",
+                    tuple(interaction.participants),
+                    tuple(contract.queue),
+                    self.all_arrived(interaction),
+                    self.is_holding(interaction),
+                    float(contract.duration) if contract.duration is not None else -1.0,
+                )
+            )
+        return tuple(rows)
 
     def _warmup(self) -> None:
         _nearest_peer(np.zeros((2, 2)), np.array([0, 2], dtype=np.int64))
@@ -128,6 +257,9 @@ class InteractionManager(Loggable):
         """Drop all interaction state between episodes. Clearing `interactions` alone leaves
         dangling ids in the indices the scan helpers walk; `next_interaction_id` stays monotonic
         so ids remain unique across episodes."""
+        for interaction in self.interactions.values():
+            if interaction.outcome == InteractionOutcome.ACTIVE:
+                self._emit(interaction, LifecycleEdge.CANCELED)
         self.interactions.clear()
         self._agent_membership.clear()
         self._interaction_by_object_type.clear()
@@ -239,6 +371,8 @@ class InteractionManager(Loggable):
                 self._on_formation_join(interaction, agent_id)
                 return True
             self._add_membership(agent_id, interaction_id, MembershipRole.PARTICIPANT)
+            if interaction.outcome == InteractionOutcome.ACTIVE:
+                self._restart_hold(interaction)
             self._maybe_activate(interaction)
             self._update_bt_movement(agent_id, interaction_id=interaction_id)
             self._on_formation_join(interaction, agent_id)
@@ -299,7 +433,9 @@ class InteractionManager(Loggable):
 
         self._drop_membership(agent_id, interaction_id)
 
-        if agent_id in interaction.participants:
+        members = list(interaction.participants)
+        was_participant = agent_id in interaction.participants
+        if was_participant:
             interaction.participants.remove(agent_id)
         if agent_id in contract.current_participants:
             contract.current_participants.remove(agent_id)
@@ -310,8 +446,10 @@ class InteractionManager(Loggable):
             self._update_bt_movement(agent_id, interaction_id=None, clear_command=True, last_outcome=reason)
 
         if len(interaction.participants) < contract.min_participants:
-            self._teardown(interaction_id, reason)
+            self._teardown(interaction_id, reason, members)
             return None
+        if was_participant and interaction.outcome == InteractionOutcome.ACTIVE:
+            self._restart_hold(interaction)
         return interaction
 
     def update(
@@ -452,6 +590,14 @@ class InteractionManager(Loggable):
             return InteractionType(interaction.type).kind.posture
         return "standing"
 
+    def active_interaction(self, agent_id: int) -> tuple[int, int] | None:
+        """(interaction_id, interaction_type) of the agent's ACTIVE participant interaction, or None."""
+        for iid in self._iter_membership(agent_id, MembershipRole.PARTICIPANT):
+            interaction = self.interactions.get(iid)
+            if interaction is not None and interaction.outcome == InteractionOutcome.ACTIVE:
+                return iid, interaction.type
+        return None
+
     def postures(self) -> dict[int, str]:
         """posture_of for every agent it does not leave standing."""
         out: dict[int, str] = {}
@@ -517,6 +663,7 @@ class InteractionManager(Loggable):
                 for next_agent in promoted:
                     self._add_membership(next_agent, interaction.id, MembershipRole.PARTICIPANT)
                 if promoted:
+                    self._restart_hold(interaction)
                     self._maybe_activate(interaction)
                     for next_agent in promoted:
                         self._update_bt_movement(next_agent, interaction_id=interaction.id)
@@ -530,6 +677,7 @@ class InteractionManager(Loggable):
                 interaction.participants.append(next_agent)
                 contract.current_participants.append(next_agent)
                 self._add_membership(next_agent, interaction.id, MembershipRole.PARTICIPANT)
+                self._restart_hold(interaction)
                 self._maybe_activate(interaction)
                 self._update_bt_movement(next_agent, interaction_id=interaction.id)
                 self._on_formation_join(interaction, next_agent)
@@ -579,8 +727,12 @@ class InteractionManager(Loggable):
             if existing_iid is not None and existing_iid != own_forming_iid:
                 if own_forming_iid is not None:
                     self._detach_quiet(own_forming_iid, agent_id)
-                if self.accept(agent_id, existing_iid) and spec.duration is not None and spec.duration > 0:
-                    self.interactions[existing_iid].member_durations[agent_id] = spec.duration
+                if self.accept(agent_id, existing_iid):
+                    existing = self.interactions[existing_iid]
+                    if spec.duration is not None and spec.duration > 0:
+                        existing.member_durations[agent_id] = spec.duration
+                    if spec.formation_spec is not None and spec.formation_spec != existing.state.get("formation_spec"):
+                        self._logger.warning(f"interaction {existing_iid} keeps the formation spec of its creator, agent {agent_id} asked for {spec.formation_spec}")
                 return existing_iid
 
         if own_forming_iid is not None:
@@ -793,7 +945,7 @@ class InteractionManager(Loggable):
                     anchor=anchor,
                     agent_lookup=self._agent_lookup,
                     formation_scale=self._formation_scale,
-                    **dict(spec.params or {}),
+                    **self._contact_params(interaction, spec.type, dict(spec.params or {})),
                 )
             except (KeyError, TypeError) as e:
                 self._logger.warning(f"Formation '{spec.type}' instantiation failed for interaction {interaction.id}: {e}")
@@ -814,7 +966,7 @@ class InteractionManager(Loggable):
         if anchor is None:
             return None
 
-        params = dict(active_spec.params or {})
+        params = self._contact_params(interaction, active_spec.type, dict(active_spec.params or {}))
         seats = self._object_seats(interaction.object_id, exclude=interaction.id)
         if seats and active_spec.type == "cluster":
             params["slot_poses"] = seats
@@ -894,10 +1046,13 @@ class InteractionManager(Loggable):
         self,
         interaction_id: int,
         outcome: int = InteractionOutcome.INTERRUPTED,
+        participants: list[int] | None = None,
     ) -> None:
         interaction = self.interactions.get(interaction_id)
         if interaction is None:
             return
+        if interaction.outcome == InteractionOutcome.ACTIVE and (edge := _TERMINAL_EDGES.get(int(outcome))) is not None:
+            self._emit(interaction, edge, participants)
         interaction.outcome = outcome
         if interaction.object_id is not None:
             self._interaction_by_object_type.pop((interaction.object_id, interaction.type), None)
@@ -918,19 +1073,23 @@ class InteractionManager(Loggable):
     def _tick_durations(self, dt: float) -> None:
         for iid, interaction in list(self.interactions.items()):
             contract = interaction.contract
-            if contract.duration is None or interaction.outcome != InteractionOutcome.ACTIVE:
+            if interaction.outcome != InteractionOutcome.ACTIVE or not self.all_arrived(interaction):
                 continue
-            formation = contract.formation
-            if formation is not None and interaction.participants:
-                if not all(formation.arrived(pid) for pid in interaction.participants):
-                    continue
+            if interaction.participants and not self.is_holding(interaction):
+                interaction.state[_HOLDING] = True
+                self._emit(interaction, LifecycleEdge.HOLD_ONSET)
+            if contract.duration is None:
+                continue
             contract.elapsed += dt
             if contract.elapsed < contract.duration:
                 continue
             if contract.access is not None and contract.queue:
-                for pid in list(interaction.participants):
-                    if pid != interaction.provider:
-                        self._release_participant(interaction, pid)
+                released = [pid for pid in interaction.participants if pid != interaction.provider]
+                if released:
+                    self._emit(interaction, LifecycleEdge.RELEASED, released)
+                interaction.state[_HOLDING] = False
+                for pid in released:
+                    self._release_participant(interaction, pid)
                 promoted = contract.access.tick(interaction, 0.0)
                 for next_agent in promoted:
                     self._add_membership(next_agent, iid, MembershipRole.PARTICIPANT)
@@ -961,6 +1120,7 @@ class InteractionManager(Loggable):
             return
         if len(interaction.participants) >= interaction.contract.min_participants:
             interaction.outcome = InteractionOutcome.ACTIVE
+            self._emit(interaction, LifecycleEdge.ACTIVATED)
             for pid in interaction.participants:
                 self._update_bt_movement(pid, interaction_id=interaction.id)
 

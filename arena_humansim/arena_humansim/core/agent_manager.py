@@ -4,7 +4,7 @@ import array
 import math
 import time
 from collections import deque
-from collections.abc import Callable, Hashable, Iterable
+from collections.abc import Callable, Hashable, Iterable, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +18,8 @@ from arena_humansim_msgs.msg import AgentState as AgentStateMsg
 from arena_humansim_msgs.msg import AgentStates as AgentStatesMsg
 from arena_humansim_msgs.msg import AgentViz as AgentVizMsg
 from arena_humansim_msgs.msg import Gesture as GestureMsg
+from arena_humansim_msgs.msg import InteractionEvent as InteractionEventMsg
+from arena_humansim_msgs.msg import InteractionFrame as InteractionFrameMsg
 from arena_humansim_msgs.msg import ObstacleConfig as ObstacleConfigMsg
 from arena_humansim_msgs.msg import Shape as ShapeMsg
 from arena_humansim_msgs.msg import SinkConfig as SinkConfigMsg
@@ -76,8 +78,8 @@ from arena_humansim.core.animation_kinds import locomotion_states
 from arena_humansim.core.behavior.compiler import BehaviorTreeFactory
 from arena_humansim.core.despawn_monitor import DespawnMonitor
 from arena_humansim.core.formation.clearance import Clearance
-from arena_humansim.core.interaction_kinds import InteractionType
-from arena_humansim.core.interaction_manager import InteractionManager
+from arena_humansim.core.interaction_kinds import InteractionType, MembershipRole
+from arena_humansim.core.interaction_manager import CONTACT_ENABLED, DEFAULT_STANDING_DISTANCE, GESTURE_ENABLED, InteractionEdge, InteractionManager, InteractionRow, check_gesture_mode
 from arena_humansim.core.locomotion import LocomotionExtension
 from arena_humansim.core.logger import SimulationLogger
 from arena_humansim.core.pool import KIND_ROBOT, AgentPool, PoolAware
@@ -151,6 +153,9 @@ _RECONFIGURABLE_PARAMS = _TUNABLE_PARAMS | {
     "local_planner",
     "publish_markers",
     "rtf",
+    "contact_mode",
+    "locomotion_standing_distance",
+    "gesture_mode",
 }
 
 _EXTERNAL_TIMEOUT_S = 2.0
@@ -195,6 +200,37 @@ def _flat(code: str, values: np.ndarray) -> array.array:
     out = array.array(code)
     out.frombytes(values.astype(_NP_TYPES[code]).tobytes())
     return out
+
+
+def _interaction_frame(header: Header, table: tuple[InteractionRow, ...], edges: Sequence[InteractionEdge] = ()) -> InteractionFrameMsg:
+    msg = InteractionFrameMsg(header=header)
+    offsets = [0]
+    members: list[int] = []
+    roles: list[int] = []
+    for row in table:
+        members.extend(row.participants)
+        members.extend(row.queue)
+        roles.extend([MembershipRole.PARTICIPANT] * len(row.participants))
+        roles.extend([MembershipRole.QUEUED] * len(row.queue))
+        offsets.append(len(members))
+    msg.interaction_id = array.array("i", [row.interaction_id for row in table])
+    msg.interaction_type = array.array("B", [row.interaction_type for row in table])
+    msg.outcome = array.array("B", [row.outcome for row in table])
+    msg.object_id = [row.object_id for row in table]
+    msg.arrived = [row.arrived for row in table]
+    msg.holding = [row.holding for row in table]
+    msg.duration = array.array("d", [row.duration for row in table])
+    msg.member_offset = array.array("I", offsets)
+    msg.member_id = array.array("i", members)
+    msg.member_role = array.array("B", roles)
+    for edge in edges:
+        event = InteractionEventMsg()
+        event.interaction_id = int(edge.interaction_id)
+        event.interaction_type = int(edge.interaction_type)
+        event.event = int(edge.edge)
+        event.participants = [int(p) for p in edge.participants]
+        msg.events.append(event)
+    return msg
 
 
 def _group_by[K: Hashable](agents: Iterable[BaseAgent], key: Callable[[BaseAgent], K]) -> Iterable[tuple[K, list[BaseAgent]]]:
@@ -310,6 +346,9 @@ class AgentManager(Node):
         self.declare_parameter("time", 0.0)
         self.declare_parameter("rtf", 1.0, ParameterDescriptor(floating_point_range=[FloatingPointRange(from_value=0.0, to_value=1000.0)]))
         self.declare_parameter("subsystem_overrun_policy", "lag")
+        self.declare_parameter("contact_mode", CONTACT_ENABLED)
+        self.declare_parameter("locomotion_standing_distance", DEFAULT_STANDING_DISTANCE)
+        self.declare_parameter("gesture_mode", GESTURE_ENABLED)
         self._static_params = frozenset(self.list_parameters([], 0).names) - inherited - _RECONFIGURABLE_PARAMS
 
         seed = self.get_parameter("seed").value
@@ -389,6 +428,12 @@ class AgentManager(Node):
         self._policy_name_to_idx = {self._module_selections["local_planner"]: 0}
         self._policies = [self._local_planner]
         self._interaction_manager = InteractionManager(rng_manager=self._rng)
+        self._interaction_manager.set_contact_mode(
+            str(self.get_parameter("contact_mode").value),
+            float(self.get_parameter("locomotion_standing_distance").value),
+        )
+        self._gesture_mode = check_gesture_mode(str(self.get_parameter("gesture_mode").value))
+        self.add_on_set_parameters_callback(self._on_contact_params)
         self._animation = MotionAnimation.create(
             self._module_selections["animation"],
         )
@@ -469,6 +514,8 @@ class AgentManager(Node):
         self._meta_published: tuple | None = None
         self._gestures_dirty = True
         self._gestures_published: list[tuple[int, GestureIntent]] | None = None
+        self._interactions_published: tuple[InteractionRow, ...] | None = None
+        self._interactions_had_edges = False
         self._tick_phases: dict[str, float] = {}
         self._overrun_count: int = 0
         self._last_overrun_log: float = 0.0
@@ -491,6 +538,8 @@ class AgentManager(Node):
             "viz_state",
             QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE, durability=DurabilityPolicy.VOLATILE),
         )
+
+        self._interactions_pub = self.create_publisher(InteractionFrameMsg, "interactions", _LATCHED_QOS)
 
         self._world_geometry_pub = self.create_publisher(
             WorldGeometryMsg,
@@ -1624,6 +1673,12 @@ class AgentManager(Node):
             self._publish_agent_meta(frame.header)
         if self._gestures_dirty or is_bt_tick:
             self._publish_agent_gestures(frame.header)
+        edges = self._interaction_manager.drain_edges()
+        table = self._interaction_manager.membership_table()
+        if edges or self._interactions_had_edges or table != self._interactions_published:
+            self._interactions_published = table
+            self._interactions_had_edges = bool(edges)
+            self._interactions_pub.publish(_interaction_frame(frame.header, table, edges))
 
         if self._marker_pub is not None and self._publish_markers > 0:
             pool.sync_back(agents)
@@ -2310,6 +2365,10 @@ class AgentManager(Node):
         gait_phase, gait_cadence = self._locomotion.frame_arrays(rows)
         msg.gait_phase = _flat("d", gait_phase)
         msg.gait_cadence = _flat("d", gait_cadence)
+        im = self._interaction_manager
+        active = [im.active_interaction(aid) for aid in pool.agent_ids[rows].tolist()] if self._gesture_mode == GESTURE_ENABLED else [None] * len(rows)
+        msg.interaction_id = array.array("i", [a[0] if a is not None else -1 for a in active])
+        msg.interaction_type = array.array("B", [int(a[1]) if a is not None else 0 for a in active])
         return msg
 
     def _publish_agent_meta(self, header: Header) -> None:
@@ -2344,7 +2403,7 @@ class AgentManager(Node):
         for aid in self._pool.agent_ids[self._own_rows()].tolist():
             agent = self._agents.get(aid)
             mv = agent.movement if agent is not None else None
-            if isinstance(mv, BehaviorTreeMovement):
+            if isinstance(mv, BehaviorTreeMovement) and self._gesture_mode == GESTURE_ENABLED:
                 owned.extend((aid, g) for g in mv.gestures)
         if owned == self._gestures_published:
             return
@@ -2510,6 +2569,28 @@ class AgentManager(Node):
         msg.wp_active = array.array("I", wp_active)
         msg.wp_active_radius = array.array("d", wp_active_radius)
         return msg
+
+    def _on_contact_params(self, params: list[Parameter]) -> SetParametersResult:
+        """Validate and apply contact_mode / locomotion_standing_distance / gesture_mode, other params pass through."""
+        mode = self._interaction_manager.contact_mode
+        distance: float | None = None
+        gesture_mode = self._gesture_mode
+        for p in params:
+            if p.name == "contact_mode":
+                mode = str(p.value)
+            elif p.name == "locomotion_standing_distance":
+                distance = float(p.value)
+            elif p.name == "gesture_mode":
+                gesture_mode = str(p.value)
+        try:
+            check_gesture_mode(gesture_mode)
+            self._interaction_manager.set_contact_mode(mode, distance)
+        except ValueError as e:
+            return SetParametersResult(successful=False, reason=str(e))
+        if gesture_mode != self._gesture_mode:
+            self._gesture_mode = gesture_mode
+            self._gestures_dirty = True
+        return SetParametersResult(successful=True)
 
     def _spawn_agents_callback(
         self,

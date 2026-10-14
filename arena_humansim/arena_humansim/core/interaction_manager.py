@@ -693,8 +693,12 @@ class InteractionManager(Loggable):
             if existing_iid is not None and existing_iid != own_forming_iid:
                 if own_forming_iid is not None:
                     self._detach_quiet(own_forming_iid, agent_id)
-                if self.accept(agent_id, existing_iid) and spec.duration is not None and spec.duration > 0:
-                    self.interactions[existing_iid].member_durations[agent_id] = spec.duration
+                if self.accept(agent_id, existing_iid):
+                    existing = self.interactions[existing_iid]
+                    if spec.duration is not None and spec.duration > 0:
+                        existing.member_durations[agent_id] = spec.duration
+                    if spec.formation_spec is not None and spec.formation_spec != existing.state.get("formation_spec"):
+                        self._logger.warning(f"interaction {existing_iid} keeps the formation spec of its creator, agent {agent_id} asked for {spec.formation_spec}")
                 return existing_iid
 
         if own_forming_iid is not None:

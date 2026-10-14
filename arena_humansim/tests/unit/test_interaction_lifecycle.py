@@ -17,7 +17,7 @@ from arena_humansim.core.interaction_manager import (
 )
 from arena_humansim.core.world_knowledge import WorldKnowledge, WorldObject
 from arena_humansim.utils.rng import RNG
-from arena_humansim.utils.types import BehaviorTreeMovement, CommandType, HighLevelCommand, Pose2D, SeekSpec
+from arena_humansim.utils.types import AnchorKind, BehaviorTreeMovement, CommandType, FormationSpec, HighLevelCommand, Pose2D, SeekSpec
 
 DT = 0.05
 
@@ -225,3 +225,15 @@ def test_bad_contact_mode_is_rejected() -> None:
         mgr.set_contact_mode("sometimes")
     with pytest.raises(ValueError):
         mgr.set_contact_mode(CONTACT_LOCOMOTION_ONLY, 0.0)
+
+
+def test_a_contact_dyad_keeps_the_formation_spec_of_its_creator() -> None:
+    agents = _pair(0.0, 4.0)
+    mgr = _mgr(agents)
+    wide = FormationSpec(type="dyad", params={"separation": 2.0}, anchor_kind=AnchorKind.CENTROID)
+    narrow = FormationSpec(type="dyad", params={"separation": 0.4}, anchor_kind=AnchorKind.CENTROID)
+    mgr.update({1: HighLevelCommand(agent_id=1, type=CommandType.SEEK, spec=SeekSpec(interaction_type=InteractionType.HUG, formation_spec=wide))}, dt=DT)
+    mgr.update({2: HighLevelCommand(agent_id=2, type=CommandType.SEEK, spec=SeekSpec(interaction_type=InteractionType.HUG, formation_spec=narrow))}, dt=DT)
+    a, b = mgr.formation_target(1), mgr.formation_target(2)
+    assert a is not None and b is not None
+    assert abs(b.x - a.x) == pytest.approx(2.0)

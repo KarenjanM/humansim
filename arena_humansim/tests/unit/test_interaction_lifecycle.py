@@ -117,6 +117,7 @@ def test_member_leaving_an_active_pair_fires_interrupted() -> None:
     mgr.stop(1, iid)
     edges = mgr.drain_edges()
     assert [e.edge for e in edges] == [LifecycleEdge.INTERRUPTED]
+    assert set(edges[0].participants) == {1, 2}
 
 
 def test_solo_forming_interaction_emits_nothing_on_teardown() -> None:

@@ -387,7 +387,9 @@ class InteractionManager(Loggable):
 
         self._drop_membership(agent_id, interaction_id)
 
-        if agent_id in interaction.participants:
+        members = list(interaction.participants)
+        was_participant = agent_id in interaction.participants
+        if was_participant:
             interaction.participants.remove(agent_id)
         if agent_id in contract.current_participants:
             contract.current_participants.remove(agent_id)
@@ -398,7 +400,7 @@ class InteractionManager(Loggable):
             self._update_bt_movement(agent_id, interaction_id=None, clear_command=True, last_outcome=reason)
 
         if len(interaction.participants) < contract.min_participants:
-            self._teardown(interaction_id, reason)
+            self._teardown(interaction_id, reason, members)
             return None
         return interaction
 
@@ -990,12 +992,13 @@ class InteractionManager(Loggable):
         self,
         interaction_id: int,
         outcome: int = InteractionOutcome.INTERRUPTED,
+        participants: list[int] | None = None,
     ) -> None:
         interaction = self.interactions.get(interaction_id)
         if interaction is None:
             return
         if interaction.outcome == InteractionOutcome.ACTIVE and (edge := _TERMINAL_EDGES.get(int(outcome))) is not None:
-            self._emit(interaction, edge)
+            self._emit(interaction, edge, participants)
         interaction.outcome = outcome
         if interaction.object_id is not None:
             self._interaction_by_object_type.pop((interaction.object_id, interaction.type), None)

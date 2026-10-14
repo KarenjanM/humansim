@@ -325,7 +325,6 @@ def _structure_step_def(val: object, _: type) -> StepDef:
         raise ValueError(f"'offer: true' is not valid for interaction={interaction!r}")
     provider_fields = ("queueable", "min_participants", "max_participants", "formation_spec")
     for pf in provider_fields:
-        # a contact dyad has no provider: whichever seeker creates it sets the formation (e.g. the pair's separation)
         if pf == "formation_spec" and kind is not None and kind.render_pose_override:
             continue
         if pf in d and d[pf] is not None and not offer:

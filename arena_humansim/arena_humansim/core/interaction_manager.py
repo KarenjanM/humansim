@@ -56,7 +56,7 @@ _ENDED_OUTCOMES: frozenset[int] = frozenset(
 
 _UNSET: Any = object()
 
-_HOLDING = "_holding"  # state key: HOLD_ONSET fired, cleared when a queue promotion restarts the hold
+_HOLDING = "_holding"  # interaction.state key
 
 
 class LifecycleEdge(enum.IntEnum):
@@ -77,10 +77,10 @@ _TERMINAL_EDGES: dict[int, LifecycleEdge] = {
 
 
 CONTACT_ENABLED = "enabled"
-CONTACT_LOCOMOTION_ONLY = "locomotion_only"  # contact kinds approach and hold at a standing distance, never touch
+CONTACT_LOCOMOTION_ONLY = "locomotion_only"
 CONTACT_MODES = (CONTACT_ENABLED, CONTACT_LOCOMOTION_ONLY)
 GESTURE_ENABLED = "enabled"
-GESTURE_DISABLED = "disabled"  # agents behave the same but publish no gesture: nothing renders, no consumer can read one
+GESTURE_DISABLED = "disabled"
 GESTURE_MODES = (GESTURE_ENABLED, GESTURE_DISABLED)
 DEFAULT_STANDING_DISTANCE = 1.2
 
@@ -1016,7 +1016,6 @@ class InteractionManager(Loggable):
             contract = interaction.contract
             if interaction.outcome != InteractionOutcome.ACTIVE or not self.all_arrived(interaction):
                 continue
-            # the hold starts on the tick the duration clock does, so onset + duration = release
             if interaction.participants and not self.is_holding(interaction):
                 interaction.state[_HOLDING] = True
                 self._emit(interaction, LifecycleEdge.HOLD_ONSET)
@@ -1026,7 +1025,6 @@ class InteractionManager(Loggable):
             if contract.elapsed < contract.duration:
                 continue
             if contract.access is not None and contract.queue:
-                # the provider stays for the next queued agent, everyone else is released
                 released = [pid for pid in interaction.participants if pid != interaction.provider]
                 if released:
                     self._emit(interaction, LifecycleEdge.RELEASED, released)

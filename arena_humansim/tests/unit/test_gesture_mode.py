@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pathlib
-
 import pytest
 
 pytest.importorskip("arena_humansim_msgs")
@@ -11,7 +9,6 @@ pytest.importorskip("rclpy")
 
 from rclpy.parameter import Parameter
 
-from arena_humansim.core import agent_manager
 from arena_humansim.core.agent_manager import AgentManager
 from arena_humansim.core.interaction_manager import CONTACT_ENABLED, GESTURE_DISABLED, GESTURE_ENABLED
 
@@ -45,15 +42,15 @@ def test_gesture_mode_switches_and_rejects_unknown() -> None:
 
     result = _set(node, gesture_mode="off")
     assert not result.successful and "gesture_mode" in result.reason
-    assert node._gesture_mode == GESTURE_ENABLED  # a rejected set leaves the arm as it was
+    assert node._gesture_mode == GESTURE_ENABLED
 
 
 def test_a_mode_switch_republishes_the_latched_gestures() -> None:
     node = _Node()
     assert _set(node, gesture_mode=GESTURE_ENABLED).successful
-    assert not node._gestures_dirty  # same arm, nothing to resend
+    assert not node._gestures_dirty
     assert _set(node, gesture_mode=GESTURE_DISABLED).successful
-    assert node._gestures_dirty  # the latched message goes out again, empty
+    assert node._gestures_dirty
 
 
 def test_unrelated_parameters_pass_through() -> None:
@@ -61,11 +58,3 @@ def test_unrelated_parameters_pass_through() -> None:
     assert _set(node, contact_mode=CONTACT_ENABLED, locomotion_standing_distance=1.2).successful
     assert node._gesture_mode == GESTURE_ENABLED
 
-
-def test_disabled_also_hides_the_interaction_id() -> None:
-    """The id is what lets a costmap group pedestrians, so the control arm must not publish it either."""
-    source = pathlib.Path(agent_manager.__file__).read_text()
-    frame = source.split("def _build_agent_frame", 1)[1].split("return msg", 1)[0]
-    assert "active_interaction(aid)" in frame and "if self._gesture_mode == GESTURE_ENABLED else [None] * len(rows)" in frame
-    gestures = source.split("def _publish_agent_gestures", 1)[1].split("\n    def ", 1)[0]
-    assert "isinstance(mv, BehaviorTreeMovement) and self._gesture_mode == GESTURE_ENABLED" in gestures

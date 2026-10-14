@@ -1,4 +1,4 @@
-# Snapshot of one live interaction (InteractionManager), for recording and analysis
+# Snapshot of one live interaction
 uint8 FORMING=0
 uint8 ACTIVE=1
 
@@ -7,7 +7,7 @@ uint8 interaction_type       # arena_humansim InteractionType index
 uint8 outcome                # FORMING | ACTIVE
 int32[] participants
 int32[] queue
-bool arrived                 # every participant is on its formation slot (true without a formation)
-bool holding                 # HOLD_ONSET has fired and the interaction has not ended
-float64 hold_elapsed         # seconds counted against duration since the hold started
+bool arrived                 # every participant is on its formation slot
+bool holding                 # HOLD_ONSET fired, interaction not yet ended
+float64 hold_elapsed         # seconds of hold counted against duration
 float64 duration             # hold duration in seconds, -1 = unbounded

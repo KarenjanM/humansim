@@ -27,8 +27,5 @@ string policy_params         # opaque JSON blob for planner
 string handedness            # l | r, empty = right
 Gesture[] gestures           # active attention channels
 
-# Active interaction (InteractionManager), for consumers doing group-aware
-# reasoning (e.g. arena_social_cost_layer). -1 = no active interaction;
-# interaction_type is only meaningful when interaction_id >= 0.
-int32 interaction_id -1
-uint8 interaction_type
+int32 interaction_id -1      # active interaction, -1 = none
+uint8 interaction_type       # InteractionType, valid when interaction_id >= 0

@@ -314,11 +314,8 @@ class AgentManager(Node):
         self.declare_parameter("time", 0.0)
         self.declare_parameter("rtf", 1.0, ParameterDescriptor(floating_point_range=[FloatingPointRange(from_value=0.0, to_value=1000.0)]))
         self.declare_parameter("subsystem_overrun_policy", "lag")
-        # motion-matched control arm: contact kinds hold at locomotion_standing_distance with no clip, settable per episode
         self.declare_parameter("contact_mode", CONTACT_ENABLED)
         self.declare_parameter("locomotion_standing_distance", DEFAULT_STANDING_DISTANCE)
-        # gesture-off control arm: the agents behave the same but publish no gesture, so nothing is rendered and
-        # no consumer can read one. The pedestrian is then what a simulator without the layer offers: a body that walks.
         self.declare_parameter("gesture_mode", GESTURE_ENABLED)
         self._static_params = frozenset(self.list_parameters([], 0).names) - inherited - _RECONFIGURABLE_PARAMS
 
@@ -508,7 +505,6 @@ class AgentManager(Node):
             QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE, durability=DurabilityPolicy.VOLATILE),
         )
 
-        # lifecycle edges ride on this, a dropped message loses an edge: keep it reliable
         self._interactions_pub = self.create_publisher(
             InteractionsMsg,
             "interactions",
@@ -2329,8 +2325,6 @@ class AgentManager(Node):
         gait_phase, gait_cadence = self._locomotion.frame_arrays(rows)
         msg.gait_phase = _flat("d", gait_phase)
         msg.gait_cadence = _flat("d", gait_cadence)
-        # group-aware consumers (arena_social_cost_layer) read the active interaction per agent; gesture_mode=disabled
-        # withholds it like the gestures
         im = self._interaction_manager
         active = [im.active_interaction(aid) for aid in pool.agent_ids[rows].tolist()] if self._gesture_mode == GESTURE_ENABLED else [None] * len(rows)
         msg.interaction_id = array.array("i", [a[0] if a is not None else -1 for a in active])
@@ -2369,8 +2363,6 @@ class AgentManager(Node):
         for aid in self._pool.agent_ids[self._own_rows()].tolist():
             agent = self._agents.get(aid)
             mv = agent.movement if agent is not None else None
-            # gesture_mode=disabled is the no-layer control: the agents behave the same, but nothing they do while
-            # interacting reaches a consumer, neither the clip nor the interaction id (see _build_agent_frame)
             if isinstance(mv, BehaviorTreeMovement) and self._gesture_mode == GESTURE_ENABLED:
                 owned.extend((aid, g) for g in mv.gestures)
         if owned == self._gestures_published:
@@ -2558,10 +2550,10 @@ class AgentManager(Node):
             return SetParametersResult(successful=False, reason=str(e))
         if gesture_mode != self._gesture_mode:
             self._gesture_mode = gesture_mode
-            self._gestures_dirty = True  # the latched gestures go out again, empty when disabled
+            self._gestures_dirty = True
         return SetParametersResult(successful=True)
 
-    def _build_interactions_msg(self, interactions: dict[int, Any], header: Any) -> InteractionsMsg:  # noqa: ANN401
+    def _build_interactions_msg(self, interactions: dict[int, InteractionState], header: Header) -> InteractionsMsg:
         """Live interactions plus the lifecycle edges fired this tick, stamped like the agent states."""
         im = self._interaction_manager
         msg = InteractionsMsg()

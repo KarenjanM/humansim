@@ -1,9 +1,8 @@
-# One lifecycle edge of an interaction, fired on the tick it happened
-# (the enclosing Interactions header carries that tick's sim time).
+# One lifecycle edge of an interaction, stamped by the enclosing Interactions
 uint8 ACTIVATED=0     # reached min_participants, participants are bound
-uint8 HOLD_ONSET=1    # every participant arrived on its formation slot, the hold clock starts
-uint8 RELEASED=2      # hold ran its duration (outcome COMPLETED), participants are free
-uint8 INTERRUPTED=3   # torn down before completing (drift, member left, preempted)
+uint8 HOLD_ONSET=1    # every participant is on its slot, the hold starts
+uint8 RELEASED=2      # hold ran its duration, participants are free
+uint8 INTERRUPTED=3   # torn down before completing
 uint8 CANCELED=4
 
 int32 interaction_id

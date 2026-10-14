@@ -116,8 +116,6 @@ class NSPPlanner(LocalPlanner):
         if path != _DEFAULT_CHECKPOINT:
             raise FileNotFoundError(f"NSP checkpoint not found at {path}")
         path.parent.mkdir(parents=True, exist_ok=True)
-        # a temp file per fetch: concurrent fetches (pytest -n, parallel launches) would otherwise share one, and the
-        # first to finish renames it away from the others; the replace is atomic and every fetch writes the same bytes
         fd, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
         tmp = Path(tmp_name)
         self._logger.info(f"Fetching NSP checkpoint from {_UPSTREAM_CHECKPOINT_URL} -> {path}")

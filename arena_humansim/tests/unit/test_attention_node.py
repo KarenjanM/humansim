@@ -898,7 +898,7 @@ def test_contact_clip_publishes_render_pose_override_once_holding(agent_factory:
     mgr = _bind(agents, itype)
     node = _node(a, _att(clip=_clip(clip, when="bound")), world, rng_np, agents=agents, ctx=StepContext(im=mgr, is_bound_lookup=mgr.is_bound))
     assert _tick(node) == RUNNING
-    assert "body" not in _slots(a)  # still approaching: no clip, rendered where it walks
+    assert "body" not in _slots(a)
     _hold(mgr, agents)
     assert _tick(node) == RUNNING
     target = mgr.formation_target(1)

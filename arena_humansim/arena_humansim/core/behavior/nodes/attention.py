@@ -440,7 +440,6 @@ class AttentionNode(py_trees.behaviour.Behaviour):
             return
         interaction = self._bound_interaction()
         im = self._ctx.im
-        # a contact clip waits for the pair to reach its slots, and never plays locomotion-only
         if interaction is not None and im is not None and im.is_contact(interaction) and not im.shows_contact(interaction):
             self._clip_published = None
             return

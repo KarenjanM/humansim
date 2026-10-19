@@ -185,7 +185,7 @@ def test_global_planner_switch_reseats_prunes_and_inherits_grid(system: RosTestS
     assert planner._occupancy_grid is not None
     assert agent.global_planner is planner
     assert not any(isinstance(w, NavMeshPlanner) for w in system.manager._wall_aware)
-    assert "navmesh" not in system.manager._module_pool
+    assert "navmesh" not in system.manager._module_pool["global_planner"]
     system.tick_manager(3)
 
 

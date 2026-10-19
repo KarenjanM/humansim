@@ -464,12 +464,11 @@ class AgentManager(Node):
             *self._perception_cache.values(),
         )
 
-        self._module_pool: dict[str, Any] = {
-            self._module_selections["global_planner"]: self._global_planner,
-            self._module_selections["local_planner"]: self._local_planner,
-            self._module_selections["animation"]: self._animation,
-            self._module_selections["collision"]: self._collision,
-            default_name: self._perception_cache[default_name],
+        self._module_pool: dict[str, dict[str, Any]] = {
+            "perception": {default_name: self._perception_cache[default_name]},
+            "local_planner": {self._module_selections["local_planner"]: self._local_planner},
+            "global_planner": {self._module_selections["global_planner"]: self._global_planner},
+            "animation": {self._module_selections["animation"]: self._animation},
         }
 
         self._behavior_trees: dict[int, BehaviourTree | None] = {}
@@ -810,14 +809,15 @@ class AgentManager(Node):
         idx = self._resolve_policy_idx(name)
         self._default_policy_idx = idx
         self._local_planner = self._policies[idx]
-        self._module_pool[name] = self._local_planner
+        self._module_pool["local_planner"][name] = self._local_planner
         self._module_selections["local_planner"] = name
 
     def _select_global_planner(self, name: str) -> None:
-        if name not in self._module_pool:
-            self._module_pool[name] = GlobalPlanner.create(name)
-            self._attach_late(self._module_pool[name])
-        self._global_planner = self._module_pool[name]
+        global_planners = self._module_pool["global_planner"]
+        if name not in global_planners:
+            global_planners[name] = GlobalPlanner.create(name)
+            self._attach_late(global_planners[name])
+        self._global_planner = global_planners[name]
         self._module_selections["global_planner"] = name
 
     def _set_marker_level(self, level: int) -> None:
@@ -908,13 +908,13 @@ class AgentManager(Node):
         self._policy_name_to_idx = {name: i for i, name in enumerate(self._policy_names)}
         self._meta_dirty = True
 
-        global_planners = [m for m in self._module_pool.values() if isinstance(m, GlobalPlanner)]
+        global_planners = list(self._module_pool["global_planner"].values())
         dropped += [p for p in global_planners if p is not self._global_planner and not any(a.global_planner is p for a in agents)]
 
         for planner in dropped:
             self._pool.unregister_extension(planner)
         self._wall_aware = tuple(w for w in self._wall_aware if not any(w is p for p in dropped))
-        self._module_pool = {name: m for name, m in self._module_pool.items() if not any(m is p for p in dropped)}
+        self._module_pool = {kind: {name: m for name, m in pool.items() if not any(m is p for p in dropped)} for kind, pool in self._module_pool.items()}
 
     def _configure_global_planner(self) -> None:
         self._global_planner.configure(
@@ -958,7 +958,7 @@ class AgentManager(Node):
             else:
                 instance = perception_cls()
             self._perception_cache[name] = instance
-            self._module_pool[name] = instance
+            self._module_pool["perception"][name] = instance
         return self._perception_cache[name]
 
     def _resolve_scenario_path(self, name_or_path: str) -> Path:
@@ -1197,7 +1197,7 @@ class AgentManager(Node):
             rng = self._rng.get_agent_substream(aid, "params")
             planner_name = agent_type.local_planner or self._module_selections["local_planner"]
             if agent_type.local_planner:
-                self._module_pool[planner_name] = self._policies[self._resolve_policy_idx(planner_name)]
+                self._module_pool["local_planner"][planner_name] = self._policies[self._resolve_policy_idx(planner_name)]
             agent = create_agent(agent_type, state, self._module_pool, self._module_selections, rng, local_planner_means=self._local_planner_means(planner_name))
         else:
             planner_name = self._module_selections["local_planner"]

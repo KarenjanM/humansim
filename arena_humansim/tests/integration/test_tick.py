@@ -11,6 +11,7 @@ from arena_humansim_msgs.msg import Waypoints as WaypointsMsg
 from arena_humansim_msgs.srv import GetProfile, SpawnAgents
 from geometry_msgs.msg import Pose2D as RosPose2D
 from geometry_msgs.msg import Vector3
+from rclpy.parameter import Parameter
 
 
 def _spawn_one(mgr: AgentManager, x: float = 0.0, y: float = 0.0, gx: float = 5.0, gy: float = 0.0) -> int:
@@ -36,6 +37,15 @@ def test_tick_100_ticks_no_errors(manager_factory: Callable[..., AgentManager], 
     for _ in range(100):
         mgr.tick()
     assert mgr._tick_count == 100
+
+
+def test_tick_noop_collision_beside_noop_animation(manager_factory: Callable[..., AgentManager], minimal_scenario: ScenarioConfig) -> None:
+    assert minimal_scenario.modules.animation == "noop"
+    mgr = manager_factory(minimal_scenario, node_name="test_tick_noop_collision", extra_params=[Parameter("collision", Parameter.Type.STRING, "noop")])
+    _spawn_one(mgr)
+    for _ in range(3):
+        mgr.tick()
+    assert mgr._tick_count == 3
 
 
 def test_tick_agent_count_stays_zero_with_no_spawns(manager_factory: Callable[..., AgentManager], minimal_scenario: ScenarioConfig) -> None:

@@ -33,21 +33,21 @@ def _resolve_modules(
     local_planner: str | None,
     global_planner: str | None,
     animation: str | None,
-    module_pool: Mapping[str, Any],
+    module_pool: Mapping[str, Mapping[str, Any]],
     defaults: dict[str, str],
 ) -> _Modules:
     return {
-        "perception": [module_pool[name] for name in perception_stack],
-        "local_planner": module_pool[local_planner or defaults["local_planner"]],
-        "global_planner": module_pool[global_planner or defaults["global_planner"]],
-        "animation": module_pool[animation or defaults["animation"]],
+        "perception": [module_pool["perception"][name] for name in perception_stack],
+        "local_planner": module_pool["local_planner"][local_planner or defaults["local_planner"]],
+        "global_planner": module_pool["global_planner"][global_planner or defaults["global_planner"]],
+        "animation": module_pool["animation"][animation or defaults["animation"]],
     }
 
 
 def create_agent(
     agent_type: AgentType | str | SampledParams,
     state: AgentState,
-    module_pool: Mapping[str, Any],
+    module_pool: Mapping[str, Mapping[str, Any]],
     defaults: dict[str, str],
     rng: np.random.Generator | None = None,
     local_planner_means: Mapping[str, float] | None = None,

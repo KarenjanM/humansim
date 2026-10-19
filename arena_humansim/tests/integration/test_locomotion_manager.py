@@ -234,7 +234,7 @@ def test_type_pinned_planner_drives_its_agent_under_a_different_default(manager_
     hsfm = mgr._policies[int(pool.policy_idx[pool.idx(chair)])]
     assert isinstance(hsfm, HSFMPlanner)
     assert mgr._agents[chair].local_planner is hsfm
-    assert mgr._module_pool["hsfm"] is hsfm
+    assert mgr._module_pool["local_planner"]["hsfm"] is hsfm
     assert mgr._agents[walker].local_planner is mgr._local_planner
     row = pool.idx(chair)
     lp = mgr._agents[chair].params.local_planner_params
@@ -257,7 +257,7 @@ def test_type_pinned_planner_drives_its_agent_under_a_different_default(manager_
     assert mgr._policy_names[int(pool.policy_idx[pool.idx(walker)])] == "helbing"
     assert mgr._policies[int(pool.policy_idx[pool.idx(chair)])] is hsfm
     assert mgr._agents[chair].local_planner is hsfm
-    assert mgr._module_pool["hsfm"] is hsfm
+    assert mgr._module_pool["local_planner"]["hsfm"] is hsfm
     assert hsfm._heading_source[pool.idx(chair)] == 1.0
     before = float(pool.pos[pool.idx(chair), 0])
     for _ in range(20):

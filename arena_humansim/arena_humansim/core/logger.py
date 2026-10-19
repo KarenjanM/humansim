@@ -6,12 +6,11 @@ import attrs
 import yaml
 
 from arena_humansim.core.agents import SampledParams
-from arena_humansim.utils.scenario import ScenarioConfig
 from arena_humansim.utils.types import AgentState, HighLevelCommand, InteractionState
 
 
 class SimulationLogger:
-    def __init__(self, log_dir: str, seed: int, config: ScenarioConfig | None = None) -> None:
+    def __init__(self, log_dir: str, seed: int, config: dict[str, object] | None = None) -> None:
         self._log_dir = Path(log_dir)
         self._log_dir.mkdir(parents=True, exist_ok=True)
 
@@ -23,7 +22,7 @@ class SimulationLogger:
         self._log_path = self._log_dir / "session.jsonl"
         self._log_file = open(self._log_path, "w")
 
-    def _write_config_snapshot(self, config: ScenarioConfig) -> None:
+    def _write_config_snapshot(self, config: dict[str, object]) -> None:
         snapshot_path = self._log_dir / "config_snapshot.yaml"
         with open(snapshot_path, "w") as f:
             f.write("# Config snapshot - arena_humansim\n")

@@ -11,6 +11,7 @@ from arena_humansim.core.behavior.nodes.helpers import (
     _at_target,
     _nav_command,
     _sample_param_dist,
+    _set_command,
 )
 from arena_humansim.core.behavior.step_context import StepContext
 from arena_humansim.core.interaction_kinds import InteractionType
@@ -189,7 +190,7 @@ class BlockNode(py_trees.behaviour.Behaviour):
                     im.seek(self._agent.state.agent_id, spec)
                 self._sought = True
                 return py_trees.common.Status.RUNNING
-            self._agent.movement.command = _nav_command(self._agent, future)
+            _set_command(self._agent, _nav_command(self._agent, future))
             return py_trees.common.Status.RUNNING
 
         mv = self._agent.movement

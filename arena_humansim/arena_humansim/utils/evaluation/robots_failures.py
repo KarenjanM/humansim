@@ -37,7 +37,7 @@ def _classify_one_robot(
     robot_id: int,
     goal: tuple[float, float] | None,
 ) -> str:
-    robot = trial_df[trial_df["agent_id"] == robot_id].sort_values("time")
+    robot = trial_df[trial_df["agent_id"] == robot_id].sort_values("time")  # pyright: ignore[reportCallIssue]
     if robot.empty:
         return "other"
 
@@ -67,21 +67,21 @@ def _classify_one_robot(
         rb = frame[frame["agent_id"] == robot_id]
         if rb.empty:
             continue
-        rb_x = float(rb["x"].iloc[0])
-        rb_y = float(rb["y"].iloc[0])
+        rb_x = float(rb["x"].iloc[0])  # pyright: ignore[reportAttributeAccessIssue]
+        rb_y = float(rb["y"].iloc[0])  # pyright: ignore[reportAttributeAccessIssue]
         others = frame[frame["agent_id"] != robot_id]
         if others.empty:
             continue
-        ox = others["x"].to_numpy()
-        oy = others["y"].to_numpy()
-        orad = others["radius"].to_numpy()
-        ovx = others["vx"].to_numpy()
-        ovy = others["vy"].to_numpy()
+        ox = others["x"].to_numpy()  # pyright: ignore[reportAttributeAccessIssue]
+        oy = others["y"].to_numpy()  # pyright: ignore[reportAttributeAccessIssue]
+        orad = others["radius"].to_numpy()  # pyright: ignore[reportAttributeAccessIssue]
+        ovx = others["vx"].to_numpy()  # pyright: ignore[reportAttributeAccessIssue]
+        ovy = others["vy"].to_numpy()  # pyright: ignore[reportAttributeAccessIssue]
         ospeed = np.hypot(ovx, ovy)
         d = np.hypot(ox - rb_x, oy - rb_y)
         hit = d < (radius + orad)
         if hit.any():
-            collision_t = float(_t)
+            collision_t = float(_t)  # pyright: ignore[reportArgumentType]
             hit_idx = int(np.argmax(hit))
             min_other_dist = float(d.min())
             collision_static = ospeed[hit_idx] < _STATIC_NEIGHBOR_SPEED or min_other_dist > _STATIC_NEIGHBOR_FAR_M
@@ -149,8 +149,8 @@ def classify_run(recordings_dirs: Path | list[Path]) -> pd.DataFrame:
 def cause_distribution(per_trial_df: pd.DataFrame, group_by: list[str]) -> pd.DataFrame:
     if per_trial_df.empty:
         return per_trial_df
-    counts = per_trial_df.groupby([*group_by, "cause"]).size().rename("n").reset_index()
-    totals = per_trial_df.groupby(group_by).size().rename("total").reset_index()
+    counts = per_trial_df.groupby([*group_by, "cause"]).size().rename("n").reset_index()  # pyright: ignore[reportArgumentType, reportCallIssue]
+    totals = per_trial_df.groupby(group_by).size().rename("total").reset_index()  # pyright: ignore[reportArgumentType, reportCallIssue]
     out = counts.merge(totals, on=group_by, how="left")
     out["fraction"] = out["n"] / out["total"]
     return out

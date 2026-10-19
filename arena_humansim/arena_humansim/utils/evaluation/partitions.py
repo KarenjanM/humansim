@@ -38,7 +38,7 @@ def k_with_ci(sub: pd.DataFrame, same: pd.Series, n_bootstrap: int, rng: np.rand
     a = sub.loc[~same].groupby("scenario")["hausdorff"].mean()
     common = sorted(set(w.index) & set(a.index))
     if not common:
-        return (np.nan,) * 5 + (0,)
+        return (np.nan, np.nan, np.nan, np.nan, np.nan, 0)
     wa, aa = w.loc[common].to_numpy(), a.loc[common].to_numpy()
     ks = []
     for _ in range(n_bootstrap):
@@ -54,13 +54,13 @@ def k_by_partition(pairwise: pd.DataFrame, n_bootstrap: int = 1000, ci_seed: int
     buckets = [b for b in ("nav", "bt", "het") if (pairwise["bucket"] == b).any()] + ["all"]
     for name, classes in PARTITIONS.items():
         df = pairwise[pairwise["p1"].isin(classes) & pairwise["p2"].isin(classes)]
-        same = df["p1"].map(classes) == df["p2"].map(classes)
+        same = df["p1"].map(classes) == df["p2"].map(classes)  # pyright: ignore[reportArgumentType, reportAttributeAccessIssue]
         for b in buckets:
             sub = df if b == "all" else df[df["bucket"] == b]
-            if sub.empty:
+            if sub.empty:  # pyright: ignore[reportAttributeAccessIssue]
                 continue
-            within, across, k, lo, hi, n = k_with_ci(sub, same.loc[sub.index], n_bootstrap, rng)
-            rows.append({"partition": name, "bucket": b, "within_mean": within, "across_mean": across, "K": k, "K_lo": lo, "K_hi": hi, "n_scenarios": n, "n_within_pairs": int(same.loc[sub.index].sum()), "n_across_pairs": int((~same.loc[sub.index]).sum())})
+            within, across, k, lo, hi, n = k_with_ci(sub, same.loc[sub.index], n_bootstrap, rng)  # pyright: ignore[reportArgumentType, reportAttributeAccessIssue]
+            rows.append({"partition": name, "bucket": b, "within_mean": within, "across_mean": across, "K": k, "K_lo": lo, "K_hi": hi, "n_scenarios": n, "n_within_pairs": int(same.loc[sub.index].sum()), "n_across_pairs": int((~same.loc[sub.index]).sum())})  # pyright: ignore[reportAttributeAccessIssue]
     return pd.DataFrame(rows)
 
 

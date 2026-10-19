@@ -11,8 +11,9 @@ from arena_humansim.utils.loggable import Loggable
 from arena_humansim.utils.types import AgentState, CommandType, HighLevelCommand, Pose2D
 
 if TYPE_CHECKING:
+    from rclpy.impl.rcutils_logger import RcutilsLogger
+
     from arena_humansim.core.agent_manager import AgentManager
-    from arena_humansim.core.logger import SimulationLogger
 
 
 @attrs.frozen
@@ -145,7 +146,7 @@ class ReplayManager(Loggable):
             )
         return commands
 
-    def replay(self, agent_manager: AgentManager, logger: SimulationLogger | None = None) -> ReplayResult:
+    def replay(self, agent_manager: AgentManager, logger: RcutilsLogger | None = None) -> ReplayResult:
         result = ReplayResult(total_ticks=len(self._ticks))
 
         for record in self._ticks:

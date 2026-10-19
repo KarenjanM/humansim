@@ -171,6 +171,7 @@ class AStarPlanner(GlobalPlanner):
     def _plan(self, requests: list[PlanRequest]) -> dict[int, list[Pose2D] | None]:
         weights = self._weights
         grid = self._occupancy_grid
+        assert weights is not None and grid is not None
         futures = {
             agent_id: self._pool.submit(
                 _astar_path,

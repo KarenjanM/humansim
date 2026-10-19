@@ -437,7 +437,7 @@ class SFMPlanner(LocalPlanner):
         theta: np.ndarray | None = None,
         axial_offset: np.ndarray | None = None,
     ) -> np.ndarray:
-        n = agent_pos.shape[0]
+        n: int = agent_pos.shape[0]
         if self._wall_segments_np.shape[0] == 0:
             return np.zeros((n, 2), dtype=np.float64)
         if theta is None:
@@ -613,10 +613,10 @@ class SFMPlanner(LocalPlanner):
             m.scale.x, m.scale.y, m.scale.z = 0.02, 0.04, 0.04
             m.color = color
             m.points = [Point(), Point()]
-        m.points[0].x, m.points[0].y, m.points[0].z = x, y, 0.15
-        m.points[1].x = x + f[0] * scale
-        m.points[1].y = y + f[1] * scale
-        m.points[1].z = 0.15
+        m.points[0].x, m.points[0].y, m.points[0].z = x, y, 0.15  # pyright: ignore[reportIndexIssue]
+        m.points[1].x = x + f[0] * scale  # pyright: ignore[reportIndexIssue]
+        m.points[1].y = y + f[1] * scale  # pyright: ignore[reportIndexIssue]
+        m.points[1].z = 0.15  # pyright: ignore[reportIndexIssue]
 
     def _compute_wall_forces_scalar(self, px: float, py: float, agent_radius: float) -> tuple[float, float]:
         f_wall_x = 0.0

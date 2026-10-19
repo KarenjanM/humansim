@@ -27,13 +27,13 @@ def effective(base: SampledParams, tunes: list[TuneDef]) -> SampledParams:
         for key, poly in tune.fields.items():
             group, _, name = key.partition(".")
             if group == "perception":
-                perception[name] = polyval(poly, perception.get(name, getattr(base.perception, name)))
+                perception[name] = polyval(poly, perception.get(name, float(getattr(base.perception, name))))
             elif group == "local_planner_params":
                 if name not in lp and len(poly) > 1:
                     raise ValueError(f"tune {key}: {base.name} has no sampled {name} to transform")
                 lp[name] = polyval(poly, lp.get(name, 0.0))
             else:
-                top[key] = polyval(poly, top.get(key, getattr(base, key)))
+                top[key] = polyval(poly, top.get(key, float(getattr(base, key))))
     changes: dict[str, object] = dict(top)
     if perception:
         changes["perception"] = attrs.evolve(base.perception, **perception)

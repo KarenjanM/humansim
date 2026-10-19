@@ -193,6 +193,8 @@ def _wrap(angle: float) -> float:
 
 if __name__ == "__main__":
     import types
+    from collections.abc import Sequence as _Seq
+    from typing import cast
 
     class _FakePose:
         def __init__(self, x: float, y: float, theta: float = 0.0):
@@ -201,7 +203,7 @@ if __name__ == "__main__":
             self.theta = theta
 
     class _FakeBelief:
-        def __init__(self, observed: list[object]) -> None:
+        def __init__(self, observed: _Seq[object]) -> None:
             self.observed_agents = observed
 
     class _FakeObserved:
@@ -210,16 +212,16 @@ if __name__ == "__main__":
             self.pose = _FakePose(x, y)
             self.velocity = (vx, vy)
 
-    def make_agent(aid: int, x: float, y: float, observed: list[object]) -> object:
+    def make_agent(aid: int, x: float, y: float, observed: _Seq[object]) -> BaseAgent:
         a = types.SimpleNamespace()
         a.state = types.SimpleNamespace(agent_id=aid, pose=_FakePose(x, y), velocity=(0.5, 0.0))
         a.params = types.SimpleNamespace(agent_radius=0.3, desired_velocity=1.0, max_velocity=1.0)
         a.belief = _FakeBelief(observed)
-        return a
+        return cast("BaseAgent", a)
 
     obs1 = [_FakeObserved(10, 1.0, 0.5, vx=-0.1), _FakeObserved(11, -1.0, 1.5)]
     agents = [make_agent(1, 0.0, 0.0, obs1)]
-    goals = {1: _FakePose(5.0, 0.0)}
+    goals = {1: Pose2D(x=5.0, y=0.0)}
 
     p1 = CADRLPlanner(seed=42)
     v1 = p1.compute(agents, goals)

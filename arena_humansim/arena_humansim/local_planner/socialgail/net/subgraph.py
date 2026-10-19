@@ -22,7 +22,7 @@ class GraphLayerProp(MessagePassing):
     def message(self, x_j):
         return x_j
 
-    def update(self, aggr_out, x):
+    def update(self, aggr_out, x):  # pyright: ignore[reportIncompatibleMethodOverride]
         return torch.cat([x, aggr_out], dim=1)
 
 
@@ -43,5 +43,6 @@ class SubGraph(nn.Module):
                 x = layer(x, edge_index)
         sub_data.x = x
         out_data = max_pool(sub_data.cluster, sub_data)
+        assert out_data.x is not None
         assert out_data.x.shape[0] % int(sub_data.time_step_len[0]) == 0
         return out_data

@@ -42,10 +42,11 @@ def rgba(r: float, g: float, b: float, a: float = 1.0) -> ColorRGBA:
     return ColorRGBA(r=r, g=g, b=b, a=a)
 
 
-def mk(ns: str, mid: int, mtype: int, stamp: Time) -> Marker:
+def mk(ns: str, mid: int, mtype: int, stamp: Time | None) -> Marker:
     m = Marker()
     m.header.frame_id = _FRAME
-    m.header.stamp = stamp
+    if stamp is not None:
+        m.header.stamp = stamp
     m.ns = ns
     m.id = mid
     m.type = mtype

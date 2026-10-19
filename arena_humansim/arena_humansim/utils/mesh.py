@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import connected_components
-from scipy.spatial import Delaunay, cKDTree
+from scipy.spatial import Delaunay, cKDTree  # pyright: ignore[reportAttributeAccessIssue]
 
 TOL = 1e-5  # point merge and intersection tolerance [m]
 MIN_LEN = 2e-3  # sub-edges shorter than this are never split
@@ -300,6 +300,8 @@ class Mesh:
             if not len(which) or it == 59:
                 break
             pts, is_input, edges, _ = _split_edges(pts, is_input, edges, which)
+        else:
+            raise AssertionError("unreachable")
         return cls(tri, edges, edges[miss], reach)
 
     def _topology(self, missing: np.ndarray) -> None:
@@ -343,10 +345,11 @@ class Mesh:
         """Id of the free mesh edge joining the vertices at A[i] and B[i], -1 where there is none."""
         if not len(A):
             return np.zeros(0, np.int64)
-        if self._vertices is None:
-            self._vertices = cKDTree(self.P)
-        da, a = self._vertices.query(A)
-        db, b = self._vertices.query(B)
+        vertices = self._vertices
+        if vertices is None:
+            vertices = self._vertices = cKDTree(self.P)
+        da, a = vertices.query(A)
+        db, b = vertices.query(B)
         key = np.minimum(a, b) * len(self.P) + np.maximum(a, b)
         e = np.minimum(np.searchsorted(self._edge_key, key), len(self._edge_key) - 1)
         found = (da <= TOL) & (db <= TOL) & (self._edge_key[e] == key) & ~self.e_con[e]

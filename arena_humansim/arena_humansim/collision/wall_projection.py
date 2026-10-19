@@ -4,7 +4,7 @@ import math
 
 import numpy as np
 from numba import njit, prange
-from scipy.spatial import cKDTree
+from scipy.spatial import cKDTree  # pyright: ignore[reportAttributeAccessIssue]
 
 from arena_humansim.collision import CollisionResolver
 from arena_humansim.core.pool import AgentPool

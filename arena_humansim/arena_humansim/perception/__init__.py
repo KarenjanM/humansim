@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
-from arena_humansim.core.pool import PoolAware
+from arena_humansim.core.pool import AgentPool, PoolAware
 from arena_humansim.utils import ModuleRegistry
 from arena_humansim.utils.loggable import Loggable
 
@@ -27,6 +27,9 @@ class Perception(PoolAware, Loggable, ABC):
         world_state: WorldState,
         belief: BeliefState,
     ) -> BeliefState: ...
+
+    def compute_pool(self, pool: AgentPool) -> None:
+        raise NotImplementedError
 
     def publish_markers(self, pub: MarkerPublisher) -> None:
         pass

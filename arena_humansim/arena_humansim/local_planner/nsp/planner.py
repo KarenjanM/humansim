@@ -397,6 +397,7 @@ class NSPPlanner(LocalPlanner):
             for m in range(1, self._past_length):
                 input_lstm = traj_t[:, m, :]
                 out1, h1, c1, out2, h2, c2 = model.forward_lstm(input_lstm, h1, c1, h2, c2)
+            assert out1 is not None and out2 is not None and self._sigma_t is not None
             current_step = traj_t[:, -1, :2]
             current_vel = traj_t[:, -1, 2:]
             coefficients, curr_supp = model.forward_coefficient_people(out2, supp_t, current_step, current_vel, device)

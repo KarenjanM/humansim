@@ -164,7 +164,7 @@ def run_ours(driver: str, starts: np.ndarray, goals: np.ndarray) -> np.ndarray:
 
 
 def run_rvo2(starts: np.ndarray, goals: np.ndarray) -> np.ndarray:
-    import rvo2
+    import rvo2  # pyright: ignore[reportMissingImports]
 
     sim = rvo2.PyRVOSimulator(DT, NEIGHBOR_DIST, MAX_NEIGHBORS, TIME_HORIZON, TIME_HORIZON, RADIUS, V_MAX)
     n = len(starts)
@@ -187,8 +187,8 @@ def run_rvo2(starts: np.ndarray, goals: np.ndarray) -> np.ndarray:
 
 
 def run_pysocialforce(starts: np.ndarray, goals: np.ndarray) -> np.ndarray:
-    import pysocialforce as psf
-    from pysocialforce import forces as psf_forces
+    import pysocialforce as psf  # pyright: ignore[reportMissingImports]
+    from pysocialforce import forces as psf_forces  # pyright: ignore[reportMissingImports]
 
     config = f"""title = "correspondence"
 agent_radius = {RADIUS}
@@ -221,13 +221,14 @@ threshold = 3
     with tempfile.NamedTemporaryFile("w", suffix=".toml", delete=False) as f:
         f.write(config)
         cfg_path = f.name
-    from pysocialforce.potentials import PedPedPotential
-    from pysocialforce.utils import stateutils
+    from pysocialforce.potentials import PedPedPotential  # pyright: ignore[reportMissingImports]
+    from pysocialforce.utils import stateutils  # pyright: ignore[reportMissingImports]
 
     class _HelbingRepulsion(psf_forces.PedRepulsiveForce):
         """PedRepulsiveForce with upstream's `desired_directions` tuple bug fixed."""
 
         def _get_force(self) -> np.ndarray:
+            assert self.peds is not None
             pot = PedPedPotential(self.peds.step_width, v0=self.config("v0"), sigma=self.config("sigma"))
             st = self.peds.state
             r_ab = pot.r_ab(st)

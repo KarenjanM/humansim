@@ -9,7 +9,7 @@ from arena_humansim.utils.types import Segments
 
 
 class WallGrid:
-    def __init__(self, segments: Segments, cell: float = 1.0) -> None:
+    def __init__(self, segments: Segments | np.ndarray, cell: float = 1.0) -> None:
         seg = np.ascontiguousarray(np.asarray(segments, dtype=np.float64).reshape(-1, 4))
         self.segments = seg
         self.cell = cell

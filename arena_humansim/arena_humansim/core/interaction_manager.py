@@ -479,7 +479,7 @@ class InteractionManager(Loggable):
                 if isinstance(cmd, HighLevelCommand) and cmd.type != CommandType.NAVIGATE:
                     interaction_cmds.append(cmd)
 
-        self._rng.shuffle(interaction_cmds)  # type: ignore[arg-type]
+        self._rng.shuffle(interaction_cmds)
         # Providers create before seekers match, so same-tick offers become visible.
         interaction_cmds.sort(key=lambda c: 0 if (c.spec is not None and c.spec.offer) else 1)
 

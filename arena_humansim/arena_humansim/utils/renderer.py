@@ -9,6 +9,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from arena_humansim_msgs.msg import AgentFrame
+
 import logging
 
 import matplotlib
@@ -66,7 +68,7 @@ def _read_bag(bag_dir: Path) -> tuple[Geometry, list[Frame]]:
 
     geometry = Geometry(walls=[], obstacles=[], world_objects=[])
     frames: list[Frame] = []
-    flat: list[tuple[int, object]] = []
+    flat: list[tuple[int, AgentFrame]] = []
     metas: list[tuple[int, list[str]]] = []
 
     while reader.has_next():
@@ -93,7 +95,7 @@ def _read_bag(bag_dir: Path) -> tuple[Geometry, list[Frame]]:
     return geometry, frames
 
 
-def _flat_frames(flat: list[tuple[int, object]], metas: list[tuple[int, list[str]]]) -> list[Frame]:
+def _flat_frames(flat: list[tuple[int, AgentFrame]], metas: list[tuple[int, list[str]]]) -> list[Frame]:
     frame_t = np.array([t for t, _ in flat], dtype=np.int64)
     counts = np.array([len(m.agent_id) for _, m in flat], dtype=np.int64)
     pidx = np.concatenate([np.asarray(m.policy_idx, dtype=np.int64) for _, m in flat])
@@ -291,7 +293,7 @@ def render(bag_dir: Path, output: Path, fmt: str, fps: int, agent_radius: float 
         agent_polys.set_linewidth(line_widths.tolist())
         quiver.set_offsets(np.column_stack([qx, qy]))
         quiver.set_UVC(qu, qv)
-        quiver.set_facecolor(q_colors)
+        quiver.set_facecolor(q_colors)  # pyright: ignore[reportArgumentType]
 
         title.set_text(f"t = {frame.t_ns / 1e9:.2f}s   agents = {len(frame.agents)}")
         return [agent_polys, quiver, title]

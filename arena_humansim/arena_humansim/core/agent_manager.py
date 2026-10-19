@@ -11,6 +11,9 @@ from typing import Any
 import attrs
 import numpy as np
 import rclpy
+import rclpy.executors
+import rclpy.subscription
+import rclpy.timer
 from arena_humansim_msgs.msg import AgentFrame as AgentFrameMsg
 from arena_humansim_msgs.msg import AgentGestures as AgentGesturesMsg
 from arena_humansim_msgs.msg import AgentMeta as AgentMetaMsg
@@ -49,6 +52,7 @@ from arena_humansim_msgs.srv import (
 )
 from geometry_msgs.msg import Point32, Vector3
 from geometry_msgs.msg import Pose2D as Pose2DMsg
+from py_trees.common import Status
 from py_trees.trees import BehaviourTree
 from rcl_interfaces.msg import FloatingPointRange, IntegerRange, ParameterDescriptor, SetParametersResult
 from rclpy.clock import Clock as RclClock
@@ -229,12 +233,12 @@ def _interaction_frame(header: Header, table: tuple[InteractionRow, ...], edges:
         event.interaction_type = int(edge.interaction_type)
         event.event = int(edge.edge)
         event.participants = [int(p) for p in edge.participants]
-        msg.events.append(event)
+        msg.events.append(event)  # pyright: ignore[reportAttributeAccessIssue]
     return msg
 
 
-def _group_by[K: Hashable](agents: Iterable[BaseAgent], key: Callable[[BaseAgent], K]) -> Iterable[tuple[K, list[BaseAgent]]]:
-    groups: dict[K, list[BaseAgent]] = {}
+def _group_by[T, K: Hashable](agents: Iterable[T], key: Callable[[T], K]) -> Iterable[tuple[K, list[T]]]:
+    groups: dict[K, list[T]] = {}
     for agent in agents:
         k = key(agent)
         groups.setdefault(k, []).append(agent)
@@ -351,20 +355,20 @@ class AgentManager(Node):
         self.declare_parameter("gesture_mode", GESTURE_ENABLED)
         self._static_params = frozenset(self.list_parameters([], 0).names) - inherited - _RECONFIGURABLE_PARAMS
 
-        seed = self.get_parameter("seed").value
-        self._dt = self.get_parameter("dt").value
-        self._bt_tick_interval = self.get_parameter("bt_tick_interval").value
-        self._mode = self.get_parameter("mode").value
-        log_dir = self.get_parameter("log_dir").value
-        replay_mode = self.get_parameter("replay_mode").value
+        seed = self._int_param("seed")
+        self._dt = self._float_param("dt")
+        self._bt_tick_interval = self._int_param("bt_tick_interval")
+        self._mode = str(self.get_parameter("mode").value)
+        log_dir = str(self.get_parameter("log_dir").value)
+        replay_mode = str(self.get_parameter("replay_mode").value)
         self._load_tunables()
         if not (0.0 < self._arrival_r_enter < self._arrival_r_exit):
             raise ValueError(f"arrival_r_enter ({self._arrival_r_enter}) must be >0 and < arrival_r_exit ({self._arrival_r_exit})")
-        self._ticks_limit = int(self.get_parameter("ticks").value)
-        time_limit = float(self.get_parameter("time").value)
+        self._ticks_limit = self._int_param("ticks")
+        time_limit = float(self._float_param("time"))
         if self._ticks_limit == 0 and time_limit > 0.0:
             self._ticks_limit = max(1, int(round(time_limit / self._dt)))
-        self._rtf = float(self.get_parameter("rtf").value)
+        self._rtf = float(self._float_param("rtf"))
         self._subsystem_overrun_policy = str(self.get_parameter("subsystem_overrun_policy").value)
         if self._mode == self.MODE_SUBSYSTEM and self._subsystem_overrun_policy != "lag":
             raise ValueError(f"subsystem_overrun_policy={self._subsystem_overrun_policy!r} not implemented; only 'lag' is available")
@@ -381,21 +385,21 @@ class AgentManager(Node):
             except KeyError:
                 valid = ", ".join(m.name.lower() for m in WaypointMode)
                 raise ValueError(f"force_waypoint_mode must be empty or one of {{{valid}}}; got {fwm_raw!r}") from None
-        _pm = self.get_parameter("publish_markers").value
+        _pm = self._int_param("publish_markers")
         if isinstance(_pm, bool):
             self._publish_markers = 2 if _pm else 0
         else:
-            self._publish_markers = int(_pm)
+            self._publish_markers = _pm
         self._phase_accum: dict[str, list[float]] = {}
 
         self._module_selections = {
-            "perception": self.get_parameter("perception").value,
-            "global_planner": self.get_parameter("global_planner").value,
-            "local_planner": self.get_parameter("local_planner").value,
+            "perception": str(self.get_parameter("perception").value),
+            "global_planner": str(self.get_parameter("global_planner").value),
+            "local_planner": str(self.get_parameter("local_planner").value),
             "robot_policy": self._robot_policy_override or "(none)",
-            "animation": self.get_parameter("animation").value,
-            "collision": self.get_parameter("collision").value,
-            "occlusion": self.get_parameter("occlusion").value,
+            "animation": str(self.get_parameter("animation").value),
+            "collision": str(self.get_parameter("collision").value),
+            "occlusion": str(self.get_parameter("occlusion").value),
         }
 
         self._rng = RNG(seed)
@@ -430,7 +434,7 @@ class AgentManager(Node):
         self._interaction_manager = InteractionManager(rng_manager=self._rng)
         self._interaction_manager.set_contact_mode(
             str(self.get_parameter("contact_mode").value),
-            float(self.get_parameter("locomotion_standing_distance").value),
+            float(self._float_param("locomotion_standing_distance")),
         )
         self._gesture_mode = check_gesture_mode(str(self.get_parameter("gesture_mode").value))
         self.add_on_set_parameters_callback(self._on_contact_params)
@@ -479,7 +483,7 @@ class AgentManager(Node):
         )
         self._event_bus = EventBus()
         self._event_scripts: list[EventScript] = []
-        self._event_scripts_by_tick: dict[int, list] = {}
+        self._event_scripts_by_tick: dict[int, list[EventScript]] = {}
         self._interaction_scripts: list[InteractionScript] = []
         self._interaction_scripts_by_tick: dict[int, list[InteractionScript]] = {}
 
@@ -678,7 +682,7 @@ class AgentManager(Node):
         if self.get_parameter("record_bag").value:
             from pathlib import Path
 
-            record_dir = self.get_parameter("record_dir").value
+            record_dir = str(self.get_parameter("record_dir").value)
             if not record_dir:
                 self._logger.warning("record_bag=true but record_dir empty; using default")
                 target = default_record_dir()
@@ -691,13 +695,13 @@ class AgentManager(Node):
                 on_contamination=self._abort_contaminated,
                 provenance={
                     "trial_id": self._trial_id,
-                    "seed": int(seed),
+                    "seed": seed,
                     "local_planner": self._module_selections["local_planner"],
                     "robot_policy": self._robot_policy_override,
                 },
             )
 
-        scenario_arg = self.get_parameter("scenario").value
+        scenario_arg = str(self.get_parameter("scenario").value)
         if scenario_arg and self._mode == self.MODE_MASTER:
             self._load_scenario_file(scenario_arg)
         elif scenario_arg:
@@ -705,6 +709,18 @@ class AgentManager(Node):
 
         self._logger.info(f"AgentManager initialized (seed={seed}, dt={self._dt}, mode={self._mode})")
         self._logger.info("Modules: " + ", ".join(f"{k}={v}" for k, v in self._module_selections.items()))
+
+    def _int_param(self, name: str) -> int:
+        value = self.get_parameter(name).value
+        if not isinstance(value, int):
+            raise TypeError(f"parameter {name!r} must be an integer, got {value!r}")
+        return value
+
+    def _float_param(self, name: str) -> float:
+        value = self.get_parameter(name).value
+        if not isinstance(value, (int, float)):
+            raise TypeError(f"parameter {name!r} must be a number, got {value!r}")
+        return value
 
     def _collect_ros_parameters(self) -> dict[str, Any]:
         params = {}
@@ -733,7 +749,7 @@ class AgentManager(Node):
 
     def _widen_ints(self, params: list[Parameter]) -> list[Parameter]:
         def widen(p: Parameter) -> Parameter:
-            if p.type_ == Parameter.Type.INTEGER and self.has_parameter(p.name) and self.get_parameter(p.name).type_ == Parameter.Type.DOUBLE:
+            if p.type_ == Parameter.Type.INTEGER and isinstance(p.value, int) and self.has_parameter(p.name) and self.get_parameter(p.name).type_ == Parameter.Type.DOUBLE:
                 return Parameter(p.name, Parameter.Type.DOUBLE, float(p.value))
             return p
 
@@ -741,25 +757,25 @@ class AgentManager(Node):
 
     def _load_tunables(self) -> None:
         self._force_local_planner = bool(self.get_parameter("force_local_planner").value)
-        self._waypoint_threshold = self.get_parameter("waypoint_threshold").value
-        self._min_speed_for_heading = self.get_parameter("min_speed_for_heading").value
-        self._arrival_r_enter = float(self.get_parameter("arrival_r_enter").value)
-        self._arrival_r_exit = float(self.get_parameter("arrival_r_exit").value)
-        self._arrival_tau_brake = float(self.get_parameter("arrival_tau_brake").value)
+        self._waypoint_threshold = self._float_param("waypoint_threshold")
+        self._min_speed_for_heading = self._float_param("min_speed_for_heading")
+        self._arrival_r_enter = float(self._float_param("arrival_r_enter"))
+        self._arrival_r_exit = float(self._float_param("arrival_r_exit"))
+        self._arrival_tau_brake = float(self._float_param("arrival_tau_brake"))
         if self._arrival_tau_brake < self._dt:
             self._logger.warning(f"arrival_tau_brake ({self._arrival_tau_brake}) < dt ({self._dt}), clamping to dt")
             self._arrival_tau_brake = float(self._dt)
         self._profile_phases = self.get_parameter("profile_phases").value
-        self._profile_interval = self.get_parameter("profile_interval").value
+        self._profile_interval = self._int_param("profile_interval")
 
     def _validate_parameters(self, params: list[Parameter]) -> SetParametersResult:
         incoming = {p.name: p.value for p in params}
         static = sorted(self._static_params & incoming.keys())
         if static:
             return SetParametersResult(successful=False, reason=f"not reconfigurable at runtime: {', '.join(static)}")
-        r_enter = incoming.get("arrival_r_enter", self.get_parameter("arrival_r_enter").value)
-        r_exit = incoming.get("arrival_r_exit", self.get_parameter("arrival_r_exit").value)
-        if not 0.0 < r_enter < r_exit:
+        r_enter = incoming.get("arrival_r_enter", self._float_param("arrival_r_enter"))
+        r_exit = incoming.get("arrival_r_exit", self._float_param("arrival_r_exit"))
+        if not (isinstance(r_enter, (int, float)) and isinstance(r_exit, (int, float)) and 0.0 < r_enter < r_exit):
             return SetParametersResult(successful=False, reason=f"arrival_r_enter ({r_enter}) must be >0 and < arrival_r_exit ({r_exit})")
         for name, registry in (("local_planner", LocalPlanner), ("global_planner", GlobalPlanner)):
             if name in incoming and incoming[name] not in registry.list_available():
@@ -781,11 +797,11 @@ class AgentManager(Node):
 
     def _apply_parameters(self) -> None:
         self._load_tunables()
-        self._select_local_planner(self.get_parameter("local_planner").value)
-        self._select_global_planner(self.get_parameter("global_planner").value)
+        self._select_local_planner(str(self.get_parameter("local_planner").value))
+        self._select_global_planner(str(self.get_parameter("global_planner").value))
         self._configure_global_planner()
-        self._set_marker_level(self.get_parameter("publish_markers").value)
-        self._set_rtf(self.get_parameter("rtf").value)
+        self._set_marker_level(self._int_param("publish_markers"))
+        self._set_rtf(self._float_param("rtf"))
         old_means, self._lp_means = self._lp_means, self._read_lp_means()
         self._reseat_agents(old_means)
         self._prune_planners()
@@ -820,6 +836,7 @@ class AgentManager(Node):
             return
         self._rtf = rtf
         if self._mode == self.MODE_MASTER:
+            assert self._timer is not None
             self._timer.timer_period_ns = int(1e9 * self._dt / rtf) if rtf > 0.0 else 0
 
     def _declare_local_planner_params(self, planner_cls: type[LocalPlanner]) -> None:
@@ -829,7 +846,7 @@ class AgentManager(Node):
 
     def _read_lp_means(self) -> dict[str, float]:
         prefix = "local_planner."
-        means = {name.removeprefix(prefix): self.get_parameter(name).value for name in self.list_parameters([], 0).names if name.startswith(prefix)}
+        means = {name.removeprefix(prefix): self._float_param(name) for name in self.list_parameters([], 0).names if name.startswith(prefix)}
         return {key: mean for key, mean in means.items() if mean > 0.0}
 
     def _local_planner_means(self, planner_name: str) -> dict[str, float]:
@@ -901,9 +918,9 @@ class AgentManager(Node):
 
     def _configure_global_planner(self) -> None:
         self._global_planner.configure(
-            inflation_radius=self.get_parameter("global_planner.inflation_radius").value,
-            resolution=self.get_parameter("global_planner.resolution").value,
-            comfort_radius=self.get_parameter("global_planner.comfort_radius").value,
+            inflation_radius=self._float_param("global_planner.inflation_radius"),
+            resolution=self._float_param("global_planner.resolution"),
+            comfort_radius=self._float_param("global_planner.comfort_radius"),
         )
 
     def _attach_late(self, planner: LocalPlanner | GlobalPlanner) -> None:
@@ -923,7 +940,7 @@ class AgentManager(Node):
             return idx
         planner = LocalPlanner.create(name)
         self._attach_late(planner)
-        self._declare_local_planner_params(planner)
+        self._declare_local_planner_params(type(planner))
         idx = len(self._policies)
         self._policies.append(planner)
         self._policy_names.append(name)
@@ -997,9 +1014,9 @@ class AgentManager(Node):
         if scenario.walls:
             walls_req = AddWalls.Request()
             for w in scenario.walls:
-                walls_req.names.append(w.name)
-                walls_req.starts.append(Point32(x=float(w.start.x), y=float(w.start.y), z=0.0))
-                walls_req.ends.append(Point32(x=float(w.end.x), y=float(w.end.y), z=0.0))
+                walls_req.names.append(w.name)  # pyright: ignore[reportAttributeAccessIssue]
+                walls_req.starts.append(Point32(x=float(w.start.x), y=float(w.start.y), z=0.0))  # pyright: ignore[reportAttributeAccessIssue]
+                walls_req.ends.append(Point32(x=float(w.end.x), y=float(w.end.y), z=0.0))  # pyright: ignore[reportAttributeAccessIssue]
             self._add_walls_callback(walls_req, AddWalls.Response())
 
         if scenario.obstacles:
@@ -1013,7 +1030,7 @@ class AgentManager(Node):
                 m.bb_z_min, m.bb_z_max = o.bb.z_min, o.bb.z_max
                 m.obstacle_type = o.obstacle_type
                 m.interaction_types = list(o.interaction_types)
-                obs_req.obstacles.append(m)
+                obs_req.obstacles.append(m)  # pyright: ignore[reportAttributeAccessIssue]
             self._add_obstacles_callback(obs_req, AddObstacles.Response())
 
         self._init_scenario_agents(scenario)
@@ -1057,13 +1074,13 @@ class AgentManager(Node):
                 w = WaypointMsg()
                 w.pose = Pose2DMsg(x=gp.x, y=gp.y, theta=gp.theta)
                 w.radius = 0.0
-                wps.points.append(w)
+                wps.points.append(w)  # pyright: ignore[reportAttributeAccessIssue]
             msg.waypoints = wps
 
             if a.spawn_tick > 0:
                 pending.append((int(a.spawn_tick), msg))
             else:
-                immediate.agents.append(msg)
+                immediate.agents.append(msg)  # pyright: ignore[reportAttributeAccessIssue]
 
         pending.sort(key=lambda item: item[0])
         self._pending_scenario_spawns.extend(pending)
@@ -1094,7 +1111,7 @@ class AgentManager(Node):
             )
             self._world_knowledge.add_object(obj)
         self._event_scripts = list(scenario.event_scripts)
-        self._event_scripts_by_tick: dict[int, list[EventScript]] = {}
+        self._event_scripts_by_tick = {}
         for script in self._event_scripts:
             self._event_scripts_by_tick.setdefault(script.tick, []).append(script)
         self._interaction_scripts = list(scenario.interaction_scripts)
@@ -1157,7 +1174,7 @@ class AgentManager(Node):
         self,
         aid: int,
         agent_msg: AgentStateMsg,
-        waypoints: Iterable[Pose2D],
+        waypoints: list[Pose2D],
     ) -> BaseAgent:
         import attrs
 
@@ -1250,6 +1267,7 @@ class AgentManager(Node):
         if not self._pinned[aid].local_planner or self._force_local_planner:
             return self._default_policy_idx
         self._pinned[aid] = attrs.evolve(self._pinned[aid], policy=True)
+        assert agent.params.local_planner is not None
         return self._policy_name_to_idx[agent.params.local_planner]
 
     def _build_base_agent_from_spawn(
@@ -1343,7 +1361,7 @@ class AgentManager(Node):
 
     def _get_profile_callback(self, request: GetProfile.Request, response: GetProfile.Response) -> GetProfile.Response:
         for name, times in self._phase_accum.items():
-            response.phase_names.append(name)
+            response.phase_names.append(name)  # pyright: ignore[reportAttributeAccessIssue]
             response.phase_means_ms.append(float(np.mean(times)))
             response.phase_p95s_ms.append(float(np.percentile(times, 95)))
         response.n_ticks = sum(len(t) for t in self._phase_accum.values()) // max(len(self._phase_accum), 1)
@@ -1398,7 +1416,7 @@ class AgentManager(Node):
         if self._pending_scenario_spawns and self._pending_scenario_spawns[0][0] <= self._tick_count:
             due = SpawnAgents.Request()
             while self._pending_scenario_spawns and self._pending_scenario_spawns[0][0] <= self._tick_count:
-                due.agents.append(self._pending_scenario_spawns.popleft()[1])
+                due.agents.append(self._pending_scenario_spawns.popleft()[1])  # pyright: ignore[reportAttributeAccessIssue]
             resp = self._spawn_agents_callback(due, SpawnAgents.Response())
             if not resp.success:
                 self._logger.error(f"deferred scenario spawn failed at tick {self._tick_count}: {resp.message}")
@@ -1460,7 +1478,7 @@ class AgentManager(Node):
             indptr = pool.neighbor_indptr
             indices = pool.neighbor_indices
             any_extra = any(len(a.perception) > 1 for a in agents)
-            agent_states = {aid: agent.state for aid, agent in self._agents.items()} if any_extra else None
+            agent_states = {aid: agent.state for aid, agent in self._agents.items()} if any_extra else {}
             for i, agent in enumerate(agents):
                 belief = BeliefState(agent_id=agent.state.agent_id)
                 nbr_idxs = indices[indptr[i] : indptr[i + 1]].tolist()
@@ -1694,7 +1712,7 @@ class AgentManager(Node):
                 self._obstacles,
             )
             if mlvl >= 2 and self._marker_pub.watched:
-                modules = list(self._perception_cache.values())
+                modules: list[Perception | GlobalPlanner | LocalPlanner] = list(self._perception_cache.values())
                 modules.append(self._global_planner)
                 modules.append(self._local_planner)
                 publish_module_markers(self._marker_pub, modules)
@@ -1994,6 +2012,7 @@ class AgentManager(Node):
             self._logger.info(f"Replay verification passed: {result.total_ticks} ticks")
         else:
             div = result.first_divergence
+            assert div is not None
             self._logger.warn(f"Replay DIVERGED at tick {div.tick}, agent {div.agent_id}: {div.detail}")
         return result
 
@@ -2579,6 +2598,8 @@ class AgentManager(Node):
             if p.name == "contact_mode":
                 mode = str(p.value)
             elif p.name == "locomotion_standing_distance":
+                if not isinstance(p.value, (int, float)):
+                    return SetParametersResult(successful=False, reason=f"locomotion_standing_distance must be a number, got {p.value!r}")
                 distance = float(p.value)
             elif p.name == "gesture_mode":
                 gesture_mode = str(p.value)
@@ -2810,6 +2831,10 @@ class AgentManager(Node):
             mv.index = 0
             mv.forward = True
         else:
+            bt = self._behavior_trees.get(aid)
+            if bt is not None:
+                bt.root.stop(Status.INVALID)
+                self._behavior_trees[aid] = None
             mv = WaypointMovement(waypoints=waypoints, radii=radii, mode=mode)
             agent.movement = mv
             self._gestures_dirty = True
@@ -3010,9 +3035,9 @@ class AgentManager(Node):
         msg.header.stamp = self.get_clock().now().to_msg()
 
         for name, ((sx, sy), (ex, ey)) in self._walls.items():
-            msg.wall_names.append(name)
-            msg.wall_starts.append(Point32(x=float(sx), y=float(sy), z=0.0))
-            msg.wall_ends.append(Point32(x=float(ex), y=float(ey), z=0.0))
+            msg.wall_names.append(name)  # pyright: ignore[reportAttributeAccessIssue]
+            msg.wall_starts.append(Point32(x=float(sx), y=float(sy), z=0.0))  # pyright: ignore[reportAttributeAccessIssue]
+            msg.wall_ends.append(Point32(x=float(ex), y=float(ey), z=0.0))  # pyright: ignore[reportAttributeAccessIssue]
 
         for obs in self._obstacles.values():
             obs_msg = ObstacleConfigMsg()
@@ -3023,7 +3048,7 @@ class AgentManager(Node):
             obs_msg.bb_x_min, obs_msg.bb_x_max, obs_msg.bb_y_min, obs_msg.bb_y_max, obs_msg.bb_z_min, obs_msg.bb_z_max = obs.bb
             obs_msg.interaction_types = list(obs.interaction_types)
             obs_msg.obstacle_type = obs.obstacle_type
-            msg.obstacles.append(obs_msg)
+            msg.obstacles.append(obs_msg)  # pyright: ignore[reportAttributeAccessIssue]
 
         for obj in self._world_knowledge._objects.values():
             info = WorldObjectInfoMsg()
@@ -3040,7 +3065,7 @@ class AgentManager(Node):
                 info.formation_type = obj.formation.type
                 info.formation_param_keys = list(obj.formation.params.keys())
                 info.formation_param_values = [float(v) for v in obj.formation.params.values()]
-            msg.world_objects.append(info)
+            msg.world_objects.append(info)  # pyright: ignore[reportAttributeAccessIssue]
 
         self._world_geometry_pub.publish(msg)
 

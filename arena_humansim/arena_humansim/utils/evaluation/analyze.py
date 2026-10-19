@@ -159,17 +159,17 @@ def _kinematics_row(df: pd.DataFrame, meta: dict[str, Any]) -> dict[str, Any]:
 def compute_pairwise_table(df: pd.DataFrame) -> pd.DataFrame:
     rows = []
     grouped = df.groupby(["scenario", "robot_policy", "seed", "agent_id"])
-    for (scenario, robot_policy, seed, agent_id), group in tqdm(grouped, total=grouped.ngroups, unit="grp", desc="pairwise"):
+    for (scenario, robot_policy, seed, agent_id), group in tqdm(grouped, total=grouped.ngroups, unit="grp", desc="pairwise"):  # pyright: ignore[reportGeneralTypeIssues]
         planners = sorted(group["planner"].unique())
         if len(planners) < 2:
             continue
-        traj = {p: group[group["planner"] == p][["x", "y"]].values for p in planners}
+        traj = {p: group[group["planner"] == p][["x", "y"]].values for p in planners}  # pyright: ignore[reportAttributeAccessIssue]
         bucket = group["bucket"].iloc[0]
         for p1, p2 in itertools.combinations(planners, 2):
             t1, t2 = traj[p1], traj[p2]
             if len(t1) == 0 or len(t2) == 0:
                 continue
-            d = pairwise_hausdorff(t1, t2)
+            d = pairwise_hausdorff(t1, t2)  # pyright: ignore[reportArgumentType]
             rows.append(
                 {
                     "bucket": bucket,
@@ -192,7 +192,7 @@ def compute_pairwise_table(df: pd.DataFrame) -> pd.DataFrame:
 def _scenario_equal_weight(slice_df: pd.DataFrame) -> float:
     if slice_df.empty:
         return float("nan")
-    return float(slice_df.groupby("scenario")["hausdorff"].mean().mean())
+    return float(slice_df.groupby("scenario")["hausdorff"].mean().mean())  # pyright: ignore[reportArgumentType, reportAttributeAccessIssue]
 
 
 def _bootstrap_K(slice_df: pd.DataFrame, n_iter: int, rng: np.random.Generator) -> tuple[float, float]:
@@ -203,8 +203,8 @@ def _bootstrap_K(slice_df: pd.DataFrame, n_iter: int, rng: np.random.Generator) 
         return float("nan"), float("nan")
 
     if len(scenarios) <= 1:
-        w_arr = within["hausdorff"].to_numpy()
-        a_arr = across["hausdorff"].to_numpy()
+        w_arr = within["hausdorff"].to_numpy()  # pyright: ignore[reportAttributeAccessIssue]
+        a_arr = across["hausdorff"].to_numpy()  # pyright: ignore[reportAttributeAccessIssue]
         if len(w_arr) == 0 or len(a_arr) == 0:
             return float("nan"), float("nan")
         ks = []
@@ -216,11 +216,11 @@ def _bootstrap_K(slice_df: pd.DataFrame, n_iter: int, rng: np.random.Generator) 
     else:
         x_per = within.groupby("scenario")["hausdorff"].mean()
         y_per = across.groupby("scenario")["hausdorff"].mean()
-        common = sorted(set(x_per.index) & set(y_per.index))
+        common = sorted(set(x_per.index) & set(y_per.index))  # pyright: ignore[reportArgumentType, reportAttributeAccessIssue]
         if not common:
             return float("nan"), float("nan")
-        x_arr = x_per.loc[common].to_numpy()
-        y_arr = y_per.loc[common].to_numpy()
+        x_arr = x_per.loc[common].to_numpy()  # pyright: ignore[reportAttributeAccessIssue]
+        y_arr = y_per.loc[common].to_numpy()  # pyright: ignore[reportAttributeAccessIssue]
         n = len(common)
         ks = []
         for _ in range(n_iter):
@@ -247,7 +247,7 @@ def _bootstrap_mean(values: np.ndarray, group_keys: np.ndarray, n_iter: int, rng
             means.append(values[idx].mean())
         return float(np.percentile(means, 5)), float(np.percentile(means, 95))
     per_group = pd.Series(values).groupby(pd.Series(group_keys)).mean()
-    arr = per_group.loc[groups].to_numpy()
+    arr = per_group.loc[groups].to_numpy()  # pyright: ignore[reportAttributeAccessIssue]
     n = len(groups)
     means = []
     for _ in range(n_iter):
@@ -263,27 +263,27 @@ def within_class_pairs(pairwise_df: pd.DataFrame, n_bootstrap: int = 1000, ci_se
         return pd.DataFrame(columns=columns)
 
     df = pairwise_df.copy()
-    df["class1_fine"] = df["p1"].map(DRIVER_CLASS_FINE)
-    df["class2_fine"] = df["p2"].map(DRIVER_CLASS_FINE)
+    df["class1_fine"] = df["p1"].map(DRIVER_CLASS_FINE)  # pyright: ignore[reportArgumentType]
+    df["class2_fine"] = df["p2"].map(DRIVER_CLASS_FINE)  # pyright: ignore[reportArgumentType]
     intra = df[df["class1_fine"].notna() & (df["class1_fine"] == df["class2_fine"])].copy()
     if intra.empty:
         return pd.DataFrame(columns=columns)
 
     rng = np.random.default_rng(ci_seed)
     rows = []
-    bucket_slices: list[tuple[str, pd.DataFrame]] = [(b, intra[intra["bucket"] == b]) for b in KNOWN_BUCKETS]
-    pooled = intra[intra["bucket"].isin(KNOWN_BUCKETS)]
-    if not pooled.empty:
-        bucket_slices.append(("all", pooled))
+    bucket_slices: list[tuple[str, pd.DataFrame]] = [(b, intra[intra["bucket"] == b]) for b in KNOWN_BUCKETS]  # pyright: ignore[reportAssignmentType]
+    pooled = intra[intra["bucket"].isin(KNOWN_BUCKETS)]  # pyright: ignore[reportAttributeAccessIssue]
+    if not pooled.empty:  # pyright: ignore[reportAttributeAccessIssue]
+        bucket_slices.append(("all", pooled))  # pyright: ignore[reportArgumentType]
 
     for label, slice_df in bucket_slices:
         if slice_df.empty:
             continue
-        for (cls, p1, p2), grp in slice_df.groupby(["class1_fine", "p1", "p2"]):
+        for (cls, p1, p2), grp in slice_df.groupby(["class1_fine", "p1", "p2"]):  # pyright: ignore[reportGeneralTypeIssues]
             vals = grp["hausdorff"].to_numpy()
             scen = grp["scenario"].to_numpy()
             lo, hi = _bootstrap_mean(vals, scen, n_bootstrap, rng)
-            point = float(grp.groupby("scenario")["hausdorff"].mean().mean())
+            point = float(grp.groupby("scenario")["hausdorff"].mean().mean())  # pyright: ignore[reportArgumentType, reportAttributeAccessIssue]
             rows.append(
                 {
                     "bucket": label,
@@ -294,7 +294,7 @@ def within_class_pairs(pairwise_df: pd.DataFrame, n_bootstrap: int = 1000, ci_se
                     "ci_lo": lo,
                     "ci_hi": hi,
                     "n_pairs": int(vals.size),
-                    "n_scenarios": int(grp["scenario"].nunique()),
+                    "n_scenarios": int(grp["scenario"].nunique()),  # pyright: ignore[reportArgumentType]
                 }
             )
     return pd.DataFrame(rows, columns=columns).sort_values(["bucket", "class", "p1", "p2"]).reset_index(drop=True)
@@ -306,8 +306,8 @@ def headline(pairwise_df: pd.DataFrame, n_bootstrap: int = 1000, ci_seed: int = 
     def _agg(slice_df: pd.DataFrame, label: str) -> dict:
         within = slice_df[slice_df["same_class"]]
         across = slice_df[~slice_df["same_class"]]
-        x = _scenario_equal_weight(within)
-        y = _scenario_equal_weight(across)
+        x = _scenario_equal_weight(within)  # pyright: ignore[reportArgumentType]
+        y = _scenario_equal_weight(across)  # pyright: ignore[reportArgumentType]
         k = y / x if x and not np.isnan(x) else float("nan")
         k_lo, k_hi = _bootstrap_K(slice_df, n_bootstrap, rng)
         return {
@@ -326,11 +326,11 @@ def headline(pairwise_df: pd.DataFrame, n_bootstrap: int = 1000, ci_seed: int = 
         slice_df = pairwise_df[pairwise_df["bucket"] == bucket]
         if slice_df.empty:
             continue
-        rows.append(_agg(slice_df, bucket))
+        rows.append(_agg(slice_df, bucket))  # pyright: ignore[reportArgumentType]
 
     pooled = pairwise_df[pairwise_df["bucket"].isin(KNOWN_BUCKETS)]
     if not pooled.empty:
-        rows.append(_agg(pooled, "all"))
+        rows.append(_agg(pooled, "all"))  # pyright: ignore[reportArgumentType]
 
     columns = ["bucket", "within_class_mean", "across_class_mean", "ratio_K", "K_lo", "K_hi", "n_pairs", "n_scenarios"]
     return pd.DataFrame(rows, columns=columns)

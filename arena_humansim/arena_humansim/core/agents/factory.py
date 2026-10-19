@@ -5,13 +5,27 @@ __all__ = [
 ]
 
 from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any, TypedDict
 
 import numpy as np
 
 from arena_humansim.utils.types import AgentState, NeedsState, NeedState
 
-from .base import BaseAgent, Module
+from .base import BaseAgent
 from .types import AgentType, SampledParams, sample_agent_type
+
+if TYPE_CHECKING:
+    from arena_humansim.animation import MotionAnimation
+    from arena_humansim.global_planner import GlobalPlanner
+    from arena_humansim.local_planner import LocalPlanner
+    from arena_humansim.perception import Perception
+
+
+class _Modules(TypedDict):
+    perception: list[Perception]
+    local_planner: LocalPlanner
+    global_planner: GlobalPlanner
+    animation: MotionAnimation
 
 
 def _resolve_modules(
@@ -19,9 +33,9 @@ def _resolve_modules(
     local_planner: str | None,
     global_planner: str | None,
     animation: str | None,
-    module_pool: dict[str, Module],
+    module_pool: Mapping[str, Any],
     defaults: dict[str, str],
-) -> dict[str, Module | list[Module]]:
+) -> _Modules:
     return {
         "perception": [module_pool[name] for name in perception_stack],
         "local_planner": module_pool[local_planner or defaults["local_planner"]],
@@ -33,7 +47,7 @@ def _resolve_modules(
 def create_agent(
     agent_type: AgentType | str | SampledParams,
     state: AgentState,
-    module_pool: dict[str, Module],
+    module_pool: Mapping[str, Any],
     defaults: dict[str, str],
     rng: np.random.Generator | None = None,
     local_planner_means: Mapping[str, float] | None = None,

@@ -35,9 +35,9 @@ def self_divergence_table(df: pd.DataFrame) -> pd.DataFrame:
         seeds = sorted(group["seed"].unique())
         if len(seeds) < 2:
             continue
-        traj = {s: group[group["seed"] == s][["x", "y"]].values for s in seeds}
+        traj = {s: group[group["seed"] == s][["x", "y"]].values for s in seeds}  # pyright: ignore[reportAttributeAccessIssue]
         bucket = group["bucket"].iloc[0]
-        cls = DRIVER_CLASS.get(planner, "unknown")
+        cls = DRIVER_CLASS.get(planner, "unknown")  # pyright: ignore[reportArgumentType, reportCallIssue]
         for s_i, s_j in itertools.combinations(seeds, 2):
             t_i, t_j = traj[s_i], traj[s_j]
             if len(t_i) == 0 or len(t_j) == 0:
@@ -52,7 +52,7 @@ def self_divergence_table(df: pd.DataFrame) -> pd.DataFrame:
                     "class": cls,
                     "seed_i": s_i,
                     "seed_j": s_j,
-                    "hausdorff": pairwise_hausdorff(t_i, t_j),
+                    "hausdorff": pairwise_hausdorff(t_i, t_j),  # pyright: ignore[reportArgumentType]
                 }
             )
     columns = ["bucket", "scenario", "agent_id", "planner", "robot_policy", "class", "seed_i", "seed_j", "hausdorff"]
@@ -62,7 +62,7 @@ def self_divergence_table(df: pd.DataFrame) -> pd.DataFrame:
 def _scenario_equal_weight(slice_df: pd.DataFrame) -> float:
     if slice_df.empty:
         return float("nan")
-    return float(slice_df.groupby("scenario")["hausdorff"].mean().mean())
+    return float(slice_df.groupby("scenario")["hausdorff"].mean().mean())  # pyright: ignore[reportArgumentType, reportAttributeAccessIssue]
 
 
 def _bootstrap_ratio(num_df: pd.DataFrame, den_df: pd.DataFrame, n_iter: int, rng: np.random.Generator) -> tuple[float, float]:
@@ -88,8 +88,8 @@ def _bootstrap_ratio(num_df: pd.DataFrame, den_df: pd.DataFrame, n_iter: int, rn
     else:
         n_per = num_df.groupby("scenario")["hausdorff"].mean()
         d_per = den_df.groupby("scenario")["hausdorff"].mean()
-        n_arr = n_per.loc[common].to_numpy()
-        d_arr = d_per.loc[common].to_numpy()
+        n_arr = n_per.loc[common].to_numpy()  # pyright: ignore[reportAttributeAccessIssue]
+        d_arr = d_per.loc[common].to_numpy()  # pyright: ignore[reportAttributeAccessIssue]
         n = len(common)
         ks = []
         for _ in range(n_iter):
@@ -119,7 +119,7 @@ def headline_seed_ratio(
     required.
     """
     rng = np.random.default_rng(ci_seed)
-    pairwise_df = pairwise_df[~pairwise_df["same_class"].astype(bool)]
+    pairwise_df = pairwise_df[~pairwise_df["same_class"].astype(bool)]  # pyright: ignore[reportAssignmentType]
 
     def _agg(num: pd.DataFrame, den: pd.DataFrame, label: str) -> dict:
         x = _scenario_equal_weight(num)
@@ -135,7 +135,7 @@ def headline_seed_ratio(
             "K_seed_hi": k_hi,
             "n_cross_pairs": int(len(num)),
             "n_self_pairs": int(len(den)),
-            "n_scenarios": int(num["scenario"].nunique()) if not num.empty else 0,
+            "n_scenarios": int(num["scenario"].nunique()) if not num.empty else 0,  # pyright: ignore[reportArgumentType]
         }
 
     rows = []
@@ -144,12 +144,12 @@ def headline_seed_ratio(
         den = self_div_df[self_div_df["bucket"] == bucket]
         if num.empty and den.empty:
             continue
-        rows.append(_agg(num, den, bucket))
+        rows.append(_agg(num, den, bucket))  # pyright: ignore[reportArgumentType]
 
     pooled_num = pairwise_df[pairwise_df["bucket"].isin(KNOWN_BUCKETS)]
     pooled_den = self_div_df[self_div_df["bucket"].isin(KNOWN_BUCKETS)]
     if not pooled_num.empty and not pooled_den.empty:
-        rows.append(_agg(pooled_num, pooled_den, "all"))
+        rows.append(_agg(pooled_num, pooled_den, "all"))  # pyright: ignore[reportArgumentType]
 
     return pd.DataFrame(rows)
 
@@ -159,14 +159,14 @@ SCALAR_METRICS: tuple[str, ...] = ("jerk", "curvature", "collisions")
 
 def _ss_main(slice_df: pd.DataFrame, factor: str, metric: str, grand: float) -> float:
     cell_mean = slice_df.groupby(factor)[metric].transform("mean")
-    return float(((cell_mean - grand) ** 2).sum())
+    return float(((cell_mean - grand) ** 2).sum())  # pyright: ignore[reportOperatorIssue]
 
 
 def _ss_two(slice_df: pd.DataFrame, f1: str, f2: str, metric: str, grand: float) -> float:
     m1 = slice_df.groupby(f1)[metric].transform("mean")
     m2 = slice_df.groupby(f2)[metric].transform("mean")
     m12 = slice_df.groupby([f1, f2])[metric].transform("mean")
-    interaction = m12 - m1 - m2 + grand
+    interaction = m12 - m1 - m2 + grand  # pyright: ignore[reportOperatorIssue]
     return float((interaction**2).sum())
 
 
@@ -180,10 +180,10 @@ def decompose_scalar_variance(kin_df: pd.DataFrame, metrics: Iterable[str] = SCA
     to rounding when residual = 0.
     """
     rows = []
-    bucket_slices: list[tuple[str, pd.DataFrame]] = [(b, kin_df[kin_df["bucket"] == b]) for b in KNOWN_BUCKETS]
+    bucket_slices: list[tuple[str, pd.DataFrame]] = [(b, kin_df[kin_df["bucket"] == b]) for b in KNOWN_BUCKETS]  # pyright: ignore[reportAssignmentType]
     pooled = kin_df[kin_df["bucket"].isin(KNOWN_BUCKETS)]
     if not pooled.empty:
-        bucket_slices.append(("all", pooled))
+        bucket_slices.append(("all", pooled))  # pyright: ignore[reportArgumentType]
 
     for label, slice_df in bucket_slices:
         if slice_df.empty or slice_df["planner"].nunique() < 2 or slice_df["seed"].nunique() < 2 or slice_df["scenario"].nunique() < 1:

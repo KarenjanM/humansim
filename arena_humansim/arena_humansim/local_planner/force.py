@@ -114,7 +114,7 @@ class ForcePlanner(LocalPlanner):
 
     def _row(self, agent: BaseAgent) -> np.ndarray:
         lp = agent.params.local_planner_params
-        return np.array([float(lp.get(k, d)) for k, d in zip(self.PARAM_DEFAULTS, self._defaults, strict=True)], dtype=np.float64)
+        return np.array([float(lp.get(k, float(d))) for k, d in zip(self.PARAM_DEFAULTS, self._defaults, strict=True)], dtype=np.float64)
 
     def attach(self, pool: AgentPool) -> None:
         self._params = np.tile(self._defaults, (pool.capacity, 1))

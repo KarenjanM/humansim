@@ -10,7 +10,7 @@ from arena_humansim.core.behavior import nodes
 def _format_annotation(annotation: object) -> str:
     if annotation is inspect.Parameter.empty:
         return "Any"
-    if hasattr(annotation, "__name__") and not hasattr(annotation, "__args__"):
+    if isinstance(annotation, type) and not hasattr(annotation, "__args__"):
         return annotation.__name__
     return str(annotation).replace("typing.", "")
 

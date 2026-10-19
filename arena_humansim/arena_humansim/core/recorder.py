@@ -83,7 +83,7 @@ class BagRecorder:
         for i, (topic_name, type_name, msg_type, qos) in enumerate(topics):
             resolved = topic_name if topic_name.startswith("/") else f"{ns}/{topic_name}"
             self._resolved[topic_name] = resolved
-            sub = node.create_subscription(msg_type, topic_name, lambda msg, t=resolved: self._write(t, msg), qos)
+            sub = node.create_subscription(msg_type, topic_name, lambda msg, t=resolved: self._write(t, msg), qos)  # pyright: ignore[reportArgumentType]
             self._writer.create_topic(TopicMetadata(id=i, name=resolved, type=type_name, serialization_format="cdr"))
             self._subs.append(sub)
 
@@ -170,7 +170,7 @@ class BagRecorder:
             t = int(msg.header.stamp.sec) * 1_000_000_000 + int(msg.header.stamp.nanosec)
             if isinstance(msg, AgentFrameMsg | AgentMetaMsg):
                 self._note_policies(msg)
-        self._writer.write(topic_name, serialize_message(msg), t)
+        self._writer.write(topic_name, serialize_message(msg), t)  # pyright: ignore[reportArgumentType]
 
     @property
     def record_dir(self) -> Path:

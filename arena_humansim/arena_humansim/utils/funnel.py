@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 from collections import deque
+from typing import Literal, overload
 
 import numpy as np
 
@@ -46,10 +47,10 @@ def funnel(s: np.ndarray, g: np.ndarray, sides: list[int], ids: list[int], xs: l
     With nearest_first an event that closes the funnel is forced when its disc is touched before the opposite one.
     """
     apex = (s[0], s[1], 0.0, 0.0)
-    path = [apex]
-    chains = {-1: deque(), 1: deque()}
+    path: list[Corner | Link] = [apex]
+    chains: dict[int, deque[Link]] = {-1: deque(), 1: deque()}
     last = {-1: -1, 1: -1}
-    cur = {-1: None, 1: None}
+    cur: dict[int, tuple[Corner, int] | None] = {-1: None, 1: None}
     n = len(sides)
     for e in range(n + 1):
         goal = e == n
@@ -99,14 +100,19 @@ def funnel(s: np.ndarray, g: np.ndarray, sides: list[int], ids: list[int], xs: l
             own.clear()
             opp.clear()
             last[-side] = -1
-            if cur[-side] is not None:
-                c, cid = cur[-side]
+            pending = cur[-side]
+            if pending is not None:
+                c, cid = pending
                 opp.append((c[0], c[1], c[2], c[3], _tangent(apex, c)))
                 last[-side] = cid
     path.extend(chains[-1])
     return path
 
 
+@overload
+def polyline(corners: list[Corner | Link], strict: Literal[False] = False) -> np.ndarray: ...
+@overload
+def polyline(corners: list[Corner | Link], strict: bool) -> np.ndarray | None: ...
 def polyline(corners: list[Corner | Link], strict: bool = False) -> np.ndarray | None:
     """Tangent legs plus arc waypoints. Waypoint radius balances overshoot and chord sag, both below 1 % of the corner radius.
 

@@ -66,7 +66,7 @@ def load_ewap(root: Path) -> pd.DataFrame:
         df["sequence"] = seq
         frames.append(df)
     df = pd.concat(frames, ignore_index=True)
-    df["time"] = df["frame"] * (EWAP_STEP_S / df["sequence"].map(EWAP_FRAME_STRIDE))
+    df["time"] = df["frame"] * (EWAP_STEP_S / df["sequence"].map(EWAP_FRAME_STRIDE))  # pyright: ignore[reportArgumentType]
     return df
 
 
@@ -77,14 +77,14 @@ def load_atc(csv: Path, hour: int = ATC_HOUR, max_people: int = ATC_MAX_PEOPLE) 
     df = df[local_hour == hour]
     if df.empty:
         raise ValueError(f"{csv}: no rows in local hour {hour}")
-    first_seen = df.groupby("agent_id")["time"].min().sort_values()
+    first_seen = df.groupby("agent_id")["time"].min().sort_values()  # pyright: ignore[reportAttributeAccessIssue, reportCallIssue]
     keep = first_seen.index[:max_people]
-    df = df[df["agent_id"].isin(keep)].copy()
+    df = df[df["agent_id"].isin(keep)].copy()  # pyright: ignore[reportArgumentType, reportAttributeAccessIssue]
     df["time"] = df["time"] - df["time"].min()
     df["x"] = df["x"] / 1000.0
     df["y"] = df["y"] / 1000.0
     df["sequence"] = f"{csv.stem}_h{hour:02d}"
-    return df[["time", "agent_id", "x", "y", "sequence"]]
+    return df[["time", "agent_id", "x", "y", "sequence"]]  # pyright: ignore[reportReturnType]
 
 
 def _per_step_scalars(df: pd.DataFrame, group_col: str) -> pd.DataFrame:
@@ -153,10 +153,10 @@ def sim_samples(recordings_dirs: list[Path]) -> pd.DataFrame:
         if meta["robot_policy"]:
             continue
         humans = df[df["agent_id"] >= 0][["time", "agent_id", "x", "y"]].copy()
-        if humans.empty:
+        if humans.empty:  # pyright: ignore[reportAttributeAccessIssue]
             continue
         humans["trial"] = meta["trial_name"]
-        s = _per_step_scalars(humans, "trial")
+        s = _per_step_scalars(humans, "trial")  # pyright: ignore[reportArgumentType]
         s["source"] = meta["planner"]
         s["bucket"] = meta["bucket"]
         parts.append(s)
@@ -220,11 +220,11 @@ def plot(samples: pd.DataFrame, out_pdf: Path, order: list[str]) -> None:
     atc = samples[samples["source"] == "ATC"]
     fig, axes = plt.subplots(1, 3, figsize=SIZE_GAP)
     for ax, k in zip(axes, SCALARS, strict=True):
-        lo, med, hi = _iqr(eth[k].to_numpy(dtype=float))
+        lo, med, hi = _iqr(eth[k].to_numpy(dtype=float))  # pyright: ignore[reportAttributeAccessIssue]
         ax.axhspan(lo, hi, color="#d9d9d9", alpha=0.7, lw=0)
         ax.axhline(med, color="k", ls="--", lw=0.8)
         if not atc.empty:
-            lo, med, hi = _iqr(atc[k].to_numpy(dtype=float))
+            lo, med, hi = _iqr(atc[k].to_numpy(dtype=float))  # pyright: ignore[reportAttributeAccessIssue]
             ax.axhspan(lo, hi, facecolor="none", edgecolor="#8c564b", hatch="///", lw=0, alpha=0.6)
             ax.axhline(med, color="#8c564b", ls=":", lw=0.9)
         for i, d in enumerate(drivers):

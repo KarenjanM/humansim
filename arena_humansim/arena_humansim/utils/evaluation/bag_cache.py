@@ -44,7 +44,7 @@ def load_trial(trial_dir: Path) -> pd.DataFrame:
     bag_mt = _bag_mtime(trial_dir)
     if cache.exists() and cache.stat().st_mtime >= bag_mt:
         try:
-            return pd.read_pickle(cache)
+            return pd.read_pickle(cache)  # pyright: ignore[reportReturnType]
         except Exception as exc:
             print(f"  unreadable cache {cache.name}: {type(exc).__name__}: {exc}; re-extracting")
     try:
@@ -71,7 +71,7 @@ def load_sweep(sweep_dir: Path) -> dict[str, pd.DataFrame]:
             print(f"  unreadable cache {cache.name}: {type(exc).__name__}: {exc}; re-aggregating")
         else:
             if set(cached.keys()) == {d.name for d in trial_dirs}:
-                return cached
+                return cached  # pyright: ignore[reportReturnType]
     sweep: dict[str, pd.DataFrame] = {}
     for trial_dir in tqdm(trial_dirs, unit="trial", desc=f"extract {sweep_dir.name}"):
         sweep[trial_dir.name] = load_trial(trial_dir)
@@ -108,7 +108,7 @@ def load_multi(sweep_dirs: list[Path]) -> dict[str, dict[str, pd.DataFrame]]:
             print(f"  unreadable cache {cache.name}: {type(exc).__name__}: {exc}; re-aggregating")
         else:
             if {sd.name for sd in sweep_dirs}.issubset(nested.keys()):
-                return {sd.name: nested[sd.name] for sd in sweep_dirs}
+                return {sd.name: nested[sd.name] for sd in sweep_dirs}  # pyright: ignore[reportReturnType]
     nested = {sd.name: load_sweep(sd) for sd in sweep_dirs}
     cache.write_bytes(pickle.dumps(nested))
     return nested

@@ -9,7 +9,7 @@ import py_trees
 
 from arena_humansim.core.agents import BaseAgent, ParamDist
 from arena_humansim.core.agents.types import ATTENTION_KEYWORDS, CHANNEL_SLOTS, CLIP_SLOT, AttentionDef, AttentionRef, ChannelDef, Pose3, RelativeRef, RobotRef
-from arena_humansim.core.behavior.nodes.helpers import _bt_logger, _nav_command, _sample_param_dist
+from arena_humansim.core.behavior.nodes.helpers import _bt_logger, _nav_command, _sample_param_dist, _set_command
 from arena_humansim.core.behavior.reach import MIN_RESIDENCE_S, reachable
 from arena_humansim.core.behavior.step_context import StepContext
 from arena_humansim.core.pool import KIND_ROBOT
@@ -295,7 +295,7 @@ class AttentionNode(py_trees.behaviour.Behaviour):
         if self._bare and not self._bound():
             cmd = _nav_command(self._agent, self._agent.state.pose)
             cmd.desired_velocity = 0.0
-            self._agent.movement.command = cmd
+            _set_command(self._agent, cmd)
 
     def _expand_all(self) -> None:
         for ch in self._channels:

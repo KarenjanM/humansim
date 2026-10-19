@@ -2,7 +2,7 @@ import numpy as np
 import py_trees
 
 from arena_humansim.core.agents import ActionDef, BaseAgent, StepDef
-from arena_humansim.core.behavior.nodes.helpers import _sample_param_dist
+from arena_humansim.core.behavior.nodes.helpers import _sample_param_dist, _set_command
 from arena_humansim.core.behavior.nodes.utility import preconditions_met, score_actions
 from arena_humansim.core.world_knowledge import WorldKnowledge
 from arena_humansim.utils import DT
@@ -76,7 +76,7 @@ class AutonomousNode(py_trees.behaviour.Behaviour):
         if self._running is None:
             scored = score_actions(needs, self._actions, self._utility_weights, self._world)
             if not scored:
-                self._agent.movement.command = None
+                _set_command(self._agent, None)
                 return _RUNNING
             self._running = self._trees[scored[0][0]]
 

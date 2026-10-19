@@ -6,6 +6,7 @@ from arena_humansim.core.interaction_kinds import InteractionType
 from arena_humansim.core.world_knowledge import WorldObject
 from arena_humansim.utils import DISTANCE_TOLERANCE
 from arena_humansim.utils.types import (
+    BehaviorTreeMovement,
     CommandType,
     HighLevelCommand,
     InteractionOutcome,
@@ -29,6 +30,12 @@ def _nav_command(agent: BaseAgent, target_pose: Pose2D) -> HighLevelCommand:
         target_pose=target_pose,
         desired_velocity=agent.state.desired_velocity,
     )
+
+
+def _set_command(agent: BaseAgent, cmd: HighLevelCommand | None) -> None:
+    mv = agent.movement
+    if isinstance(mv, BehaviorTreeMovement):
+        mv.command = cmd
 
 
 def _seek_command(agent: BaseAgent, spec: SeekSpec) -> HighLevelCommand:

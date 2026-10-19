@@ -105,6 +105,7 @@ class Router:
         out, worst = self._seg_clear(poly[:-1], poly[1:], np.zeros(len(poly) - 1, np.int64), 1, self.r)
         if out[0] >= self.r - VERIFY_EPS:
             return None
+        assert worst is not None
         p0, p1, wj, _ = worst
         a, b = self._walls[wj]
         da, ta = _pt_seg(P[a], p0, p1)
@@ -118,7 +119,7 @@ class Router:
         side = -1 if _cross(p1 - p0, P[vid] - q) > 0 else 1
         return dict(q=q, vid=vid, side=side)
 
-    def _events(self, ch: list[int], ts: int, tg: int) -> tuple[dict | None, int | None]:
+    def _events(self, ch: list[int] | np.ndarray, ts: int, tg: int) -> tuple[dict | None, int | None]:
         """Channel as funnel events. On a channel that turns back on itself returns (None, portal index to ban)."""
         mesh = self.mesh
         ch = np.asarray(ch, dtype=np.int64)
@@ -216,6 +217,7 @@ class Router:
         ends = np.stack([ev["L"], ev["R"]])
         v = self.mesh.P[ends]
         x, y = v[..., 0], v[..., 1]
+        assert self._rho is not None
         rho = self._rho[ends]
         span = 2 * GAP_SHARE * np.hypot(x[0] - x[1], y[0] - y[1])
         rho = np.minimum(rho, np.maximum(span / 2, span - rho[::-1]))
@@ -246,6 +248,7 @@ class Router:
                 return poly, None
             if not self._insert(ev, viol):
                 break
+        assert viol is not None
         return None, self._locate(ev, viol["q"])
 
     def _terminals(self, pts: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
@@ -321,6 +324,7 @@ class Router:
                     return poly, ev["ch"]
             if len(ch) == 1 and ts == tg:
                 return None
+            assert hint is not None
             if hint <= 0:
                 snodes.pop(ch[0], None)
             elif hint >= len(ch):
@@ -404,7 +408,9 @@ class Router:
         if try_line_of_sight and self.line_of_sight(s[None], g[None])[0]:
             return np.array([s, g]), none
         if t[0] == t[1]:
-            poly, _ = self._string_pull(s, g, self._events([], int(t[0]), int(t[1]))[0])
+            ev, _ = self._events([], int(t[0]), int(t[1]))
+            assert ev is not None
+            poly, _ = self._string_pull(s, g, ev)
             if poly is not None:
                 return poly, none
         snodes = {int(n): float(c) for n, c in zip(nodes[0], cost[0], strict=False) if np.isfinite(c)}
@@ -467,7 +473,7 @@ class Router:
             soft = [self._comfort_pull(starts[i], g, ev) for i, ev in zip(todo, evs, strict=True)]
             have = [k for k, poly in enumerate(soft) if poly is not None]
             if have:
-                clear = self._clear_many([soft[k] for k in have])
+                clear = self._clear_many([poly for poly in soft if poly is not None])
                 for k, c in zip(have, clear, strict=True):
                     if c >= self.r - VERIFY_EPS:
                         out[todo[k]] = (soft[k], evs[k]["ch"])

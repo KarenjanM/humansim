@@ -236,6 +236,7 @@ class SocialGAILPlanner(LocalPlanner):
             unrot[k] = R_inv
 
         torch = self._torch
+        assert torch is not None and self._Batch is not None and self._actor is not None
         batch = self._Batch.from_data_list(graphs).to(self._device)
         with torch.no_grad():
             actions = self._actor(batch).cpu().numpy()

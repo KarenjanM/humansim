@@ -140,7 +140,7 @@ class WalkFormation(Formation):
         return self.tick_all([self], dt)[0]
 
     @classmethod
-    def tick_all(cls, formations: Sequence[Self], dt: float) -> list[dict[int, Pose2D]]:
+    def tick_all(cls, formations: Sequence[Self], dt: float) -> list[dict[int, Pose2D]]:  # pyright: ignore[reportIncompatibleMethodOverride]
         steps = [f._advance(dt) for f in formations]
         walking = [(f, step) for f, step in zip(formations, steps, strict=True) if step is not None and not f._stopped()]
         cls._sense([(f, step) for f, step in walking if f._due(dt)])

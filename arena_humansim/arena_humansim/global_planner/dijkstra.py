@@ -255,6 +255,7 @@ class DijkstraPlanner(GlobalPlanner):
 
     def _plan(self, requests: list[PlanRequest]) -> dict[int, list[Pose2D] | None]:
         results: dict[int, list[Pose2D] | None] = {}
+        assert self._grid_graph is not None and self._occupancy_grid is not None
         for agent_id, agent_pos, target in requests:
             start_rc = world_to_grid(self._origin, self._resolution, agent_pos.x, agent_pos.y)
             goal_rc = world_to_grid(self._origin, self._resolution, target.x, target.y)

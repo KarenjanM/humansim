@@ -109,7 +109,7 @@ class BitmapOccluder(Occluder):
         dilated[:, 1:] |= grid[:, :-1]
         dilated[:, :-1] |= grid[:, 1:]
         self._grid = dilated
-        self._dist = np.ascontiguousarray(distance_transform_edt(~dilated) * _RESOLUTION, dtype=np.float64)
+        self._dist = np.ascontiguousarray(distance_transform_edt(~dilated) * _RESOLUTION, dtype=np.float64)  # pyright: ignore[reportOperatorIssue]
 
     def clear(self, p_a: np.ndarray, p_b: np.ndarray) -> np.ndarray:
         result = np.ones(len(p_a), dtype=np.bool_)

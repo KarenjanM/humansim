@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import numpy as np
-from scipy.spatial import cKDTree
+from scipy.spatial import cKDTree  # pyright: ignore[reportAttributeAccessIssue]
 
 from . import Perception
 
@@ -198,9 +198,8 @@ class DefaultPerception(Perception):
             return belief
 
         omnidirectional = vision_fov >= 360.0
-        if not omnidirectional:
-            half_fov = np.radians(vision_fov * 0.5)
-            heading = observer.pose.theta
+        half_fov = np.radians(vision_fov * 0.5)
+        heading = observer.pose.theta
 
         query_radius = max(vision_range, proximity_sense)
         neighbor_indices = self._shared_tree.query_ball_point([ox, oy], query_radius)

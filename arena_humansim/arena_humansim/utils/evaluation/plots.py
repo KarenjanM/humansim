@@ -71,7 +71,7 @@ def _family_edges(drivers: list[str]) -> list[int]:
 def scenario_k_table(pairwise: pd.DataFrame) -> pd.DataFrame:
     """Per-scenario within/across class means and K, from the pair table."""
     rows = []
-    for (bucket, scen), g in pairwise.groupby(["bucket", "scenario"]):
+    for (bucket, scen), g in pairwise.groupby(["bucket", "scenario"]):  # pyright: ignore[reportGeneralTypeIssues]
         w = g.loc[g["same_class"], "hausdorff"].mean()
         a = g.loc[~g["same_class"], "hausdorff"].mean()
         rows.append({"bucket": bucket, "scenario": scen, "within": w, "across": a, "K": a / w if w > 0 else np.nan, "n_pairs": len(g)})
@@ -89,7 +89,7 @@ def plot_k_per_scenario(pairwise: pd.DataFrame, headline: pd.DataFrame, out: Pat
     ax.axhline(1.0, color="k", lw=0.8)
     for _, row in headline.iterrows():
         if row["bucket"] in colors:
-            ax.axhline(row["ratio_K"], color=colors[row["bucket"]], lw=0.8, ls="--")
+            ax.axhline(row["ratio_K"], color=colors[row["bucket"]], lw=0.8, ls="--")  # pyright: ignore[reportArgumentType]
     ax.set_xticks(x)
     ax.set_xticklabels([s.replace("_", " ") for s in table["scenario"]], rotation=60, ha="right", fontsize=6)
     ax.set_ylabel("K = across-class / within-class")
@@ -99,15 +99,15 @@ def plot_k_per_scenario(pairwise: pd.DataFrame, headline: pd.DataFrame, out: Pat
     fig.tight_layout()
     fig.savefig(out)
     plt.close(fig)
-    return table
+    return table  # pyright: ignore[reportReturnType]
 
 
 def pair_matrix(pairwise: pd.DataFrame, bucket: str | None) -> pd.DataFrame:
     sub = pairwise if bucket is None else pairwise[pairwise["bucket"] == bucket]
-    m = sub.groupby(["p1", "p2", "scenario"])["hausdorff"].mean().groupby(["p1", "p2"]).mean()
-    drivers = _present(DRIVER_ORDER, pairwise["p1"], pairwise["p2"])
+    m = sub.groupby(["p1", "p2", "scenario"])["hausdorff"].mean().groupby(["p1", "p2"]).mean()  # pyright: ignore[reportAttributeAccessIssue]
+    drivers = _present(DRIVER_ORDER, pairwise["p1"], pairwise["p2"])  # pyright: ignore[reportArgumentType]
     mat = pd.DataFrame(np.nan, index=drivers, columns=drivers)
-    for (p1, p2), v in m.items():
+    for (p1, p2), v in m.items():  # pyright: ignore[reportAttributeAccessIssue, reportGeneralTypeIssues]
         if p1 in mat.index and p2 in mat.columns:
             mat.loc[p1, p2] = v
             mat.loc[p2, p1] = v
@@ -151,7 +151,7 @@ def plot_kinematic_distributions(kin: pd.DataFrame, out: Path, het_kin: pd.DataF
     if het_kin is not None and (het_kin["bucket"] == "het").any():
         rows.append(("het", het_kin[het_kin["bucket"] == "het"]))
     metrics = [("jerk", "Jerk (m/s$^3$)", False), ("curvature", "Curvature (1/m)", False), ("collisions", "Collisions / trial", True)]
-    drivers = _present(DRIVER_ORDER, *(sub["planner"] for _, sub in rows))
+    drivers = _present(DRIVER_ORDER, *(sub["planner"] for _, sub in rows))  # pyright: ignore[reportArgumentType]
     fig, axes = plt.subplots(len(rows), 3, figsize=SIZE_KINEMATIC, squeeze=False)
     for r, (b, sub) in enumerate(rows):
         for c, (metric, label, log) in enumerate(metrics):
@@ -237,12 +237,12 @@ def plot_variance_decomposition(var: pd.DataFrame, out: Path) -> None:
     cols = ["share_scenario", "share_driver", "share_seed", "share_scenario_x_driver", "share_scenario_x_seed", "share_driver_x_seed", "share_residual"]
     labels = ["scenario", "driver", "seed", "scenario x driver", "scenario x seed", "driver x seed", "residual"]
     sub = var[var["bucket"].isin(["nav", "bt", "all"])].copy()
-    sub["row"] = sub["bucket"].map(BUCKET_LABEL) + " / " + sub["metric"]
+    sub["row"] = sub["bucket"].map(BUCKET_LABEL) + " / " + sub["metric"]  # pyright: ignore[reportArgumentType, reportAttributeAccessIssue]
     fig, ax = plt.subplots(figsize=(6.0, 0.35 * len(sub) + 1.2))
     left = np.zeros(len(sub))
     palette = ["#4c78a8", "#e45756", "#bab0ac", "#72b7b2", "#f58518", "#54a24b", "#dddddd"]
     for col, lab, colr in zip(cols, labels, palette, strict=True):
-        vals = sub[col].to_numpy(dtype=float)
+        vals = sub[col].to_numpy(dtype=float)  # pyright: ignore[reportAttributeAccessIssue]
         ax.barh(sub["row"], vals, left=left, color=colr, label=lab)
         left += vals
     ax.set_xlim(0, 1)
@@ -259,15 +259,15 @@ def plot_sensitivity_profile(cells: pd.DataFrame, out: Path) -> pd.DataFrame:
     plt = _plt()
     metrics = [("success_mean", "Success rate", "viridis", ".2f"), ("psv_per_sec_mean", "PSV / sec", "magma_r", ".2f"), ("n_robot_collisions_mean", "Robot collisions", "magma_r", ".1f")]
     pooled = []
-    for (pol, drv), g in cells.groupby(["robot_policy", "ped_planner"]):
-        row = {"robot_policy": pol, "ped_planner": drv, "n_trials": int(g["n_trials"].sum())}
+    for (pol, drv), g in cells.groupby(["robot_policy", "ped_planner"]):  # pyright: ignore[reportGeneralTypeIssues]
+        row = {"robot_policy": pol, "ped_planner": drv, "n_trials": int(g["n_trials"].sum())}  # pyright: ignore[reportArgumentType]
         for m, _, _, _ in metrics:
             row[m] = float(np.average(g[m], weights=g["n_trials"]))
         pooled.append(row)
     pooled = pd.DataFrame(pooled)
     fs_cell, fs_tick, fs_title = 10.0, 10.5, 12.0
-    drivers = _present(DRIVER_ORDER, pooled["ped_planner"])
-    policies = _present(POLICY_ORDER, pooled["robot_policy"])
+    drivers = _present(DRIVER_ORDER, pooled["ped_planner"])  # pyright: ignore[reportArgumentType]
+    policies = _present(POLICY_ORDER, pooled["robot_policy"])  # pyright: ignore[reportArgumentType]
     fig, axes = plt.subplots(1, 3, figsize=SIZE_SENSITIVITY)
     for ax, (m, label, cmap, fmt) in zip(axes, metrics, strict=True):
         mat = pooled.pivot(index="robot_policy", columns="ped_planner", values=m).reindex(index=policies, columns=drivers)
@@ -330,7 +330,7 @@ def precision_curve(pairwise: pd.DataFrame, n_bootstrap: int = 1000, ci_seed: in
             sub = pairwise[(pairwise["bucket"] == b) & (pairwise["seed"] <= seeds[k - 1])]
             if sub.empty:
                 continue
-            _, _, ratio, lo, hi, n = k_with_ci(sub, sub["same_class"].astype(bool), n_bootstrap, rng)
+            _, _, ratio, lo, hi, n = k_with_ci(sub, sub["same_class"].astype(bool), n_bootstrap, rng)  # pyright: ignore[reportArgumentType]
             rows.append({"bucket": b, "n_seeds": k, "K": ratio, "K_lo": lo, "K_hi": hi, "n_scenarios": n})
     return pd.DataFrame(rows)
 

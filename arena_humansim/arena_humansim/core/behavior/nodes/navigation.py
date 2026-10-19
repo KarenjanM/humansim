@@ -11,6 +11,7 @@ from arena_humansim.core.behavior.nodes.helpers import (
     _bt_logger,
     _nav_command,
     _resolve_interaction_radius,
+    _set_command,
 )
 from arena_humansim.core.behavior.step_context import StepContext
 from arena_humansim.core.world_knowledge import WorldKnowledge, WorldObject
@@ -130,5 +131,5 @@ class GoToNode(py_trees.behaviour.Behaviour):
             return py_trees.common.Status.FAILURE
         if self._arrived(target, tolerance):
             return py_trees.common.Status.SUCCESS
-        self._agent.movement.command = _nav_command(agent=self._agent, target_pose=target)
+        _set_command(self._agent, _nav_command(agent=self._agent, target_pose=target))
         return py_trees.common.Status.RUNNING

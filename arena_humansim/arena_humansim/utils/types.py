@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import enum
 import math
-from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any
 
 import attrs
 
 if TYPE_CHECKING:
+    from arena_humansim.core.access import AccessPolicy
+    from arena_humansim.core.formation import Formation
     from arena_humansim.core.interaction_kinds import InteractionType
     from arena_humansim.utils.scenario import FormationConfig
 
@@ -141,34 +143,6 @@ class AcceptResult(enum.IntEnum):
     BECAME_PARTICIPANT = 0
     QUEUED = 1
     REJECTED = 2
-
-
-@runtime_checkable
-class AccessPolicy(Protocol):
-    def on_accept(self, interaction: InteractionState, agent_id: int) -> AcceptResult: ...
-
-    def tick(self, interaction: InteractionState, dt: float) -> list[int]: ...
-
-    def on_stop(self, interaction: InteractionState, agent_id: int) -> None: ...
-
-
-@runtime_checkable
-class Formation(Protocol):
-    def on_join(self, agent_id: int, *, participant: bool = True) -> None: ...
-
-    def on_leave(self, agent_id: int) -> None: ...
-
-    def tick(self, dt: float) -> dict[int, Pose2D]: ...
-
-    def arrived(self, agent_id: int) -> bool: ...
-
-    def slot_of(self, agent_id: int) -> Pose2D | None: ...
-
-    def seat_of(self, agent_id: int) -> Pose2D | None: ...
-
-    def occupied_slots(self) -> list[Pose2D]: ...
-
-    def speeds(self) -> dict[int, float]: ...
 
 
 @attrs.define

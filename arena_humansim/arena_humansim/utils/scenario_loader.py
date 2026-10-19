@@ -1,5 +1,8 @@
 """cattrs structuring hooks for scenario/agent-type YAML loading."""
 
+from collections.abc import Mapping
+from typing import Any
+
 import attrs
 import cattrs
 
@@ -40,6 +43,12 @@ from arena_humansim.utils.types import AnchorKind, FormationSpec, Pose2D, Waypoi
 converter = cattrs.Converter()
 
 
+def _as_dict(val: object) -> dict[str, Any]:
+    if not isinstance(val, Mapping):
+        raise TypeError(f"expected a mapping, got {type(val).__name__}")
+    return dict(val)
+
+
 def _structure_waypoint_mode(val: object, _: type) -> WaypointMode:
     if isinstance(val, WaypointMode):
         return val
@@ -62,7 +71,7 @@ def _structure_need_dist(val: object, _: type) -> NeedDist:
         return NeedDist(initial=float(val))
     if isinstance(val, NeedDist):
         return val
-    return NeedDist(**dict(val))
+    return NeedDist(**_as_dict(val))
 
 
 converter.register_structure_hook(NeedDist, _structure_need_dist)
@@ -71,7 +80,7 @@ converter.register_structure_hook(NeedDist, _structure_need_dist)
 def _structure_need_condition(val: object, _: type) -> NeedCondition:
     if isinstance(val, NeedCondition):
         return val
-    return NeedCondition(**val)
+    return NeedCondition(**_as_dict(val))
 
 
 converter.register_structure_hook(NeedCondition, _structure_need_condition)
@@ -80,7 +89,7 @@ converter.register_structure_hook(NeedCondition, _structure_need_condition)
 def _structure_action_def(val: object, _: type) -> ActionDef:
     if isinstance(val, ActionDef):
         return val
-    d = dict(val)
+    d = _as_dict(val)
     if "attention" in d or d.get("kind") == "attention":
         raise ValueError("'attention' is not supported in the autonomous 'actions' library")
     if "when" in d and isinstance(d["when"], dict):
@@ -254,7 +263,7 @@ def _check_bare_attention(att: AttentionDef, raw: dict, timed: bool) -> None:
 def _structure_go_to_step_def(val: object, _: type) -> GoToStepDef:
     if isinstance(val, GoToStepDef):
         return val
-    d = dict(val)
+    d = _as_dict(val)
     d.pop("kind", None)
     has_pose = "target_pose" in d and d["target_pose"] is not None
     has_target = "target" in d and d["target"] is not None
@@ -267,7 +276,7 @@ def _structure_go_to_step_def(val: object, _: type) -> GoToStepDef:
         if isinstance(pose, Pose2D):
             d["target_pose"] = pose
         else:
-            pose_d = dict(pose)
+            pose_d = _as_dict(pose)
             d["target_pose"] = Pose2D(x=float(pose_d["x"]), y=float(pose_d["y"]), theta=float(pose_d.get("theta", 0.0)))
     if d.get("attention") is not None:
         d["attention"] = _structure_attention_def(d["attention"])
@@ -286,7 +295,7 @@ converter.register_structure_hook(GoToStepDef, _structure_go_to_step_def)
 def _structure_attention_step_def(val: object, _: type) -> AttentionStepDef:
     if isinstance(val, AttentionStepDef):
         return val
-    d = dict(val)
+    d = _as_dict(val)
     explicit_kind = d.pop("kind", None) is not None
     if "attention" not in d:
         raise ValueError("attention step requires an 'attention:' block")
@@ -312,7 +321,7 @@ converter.register_structure_hook(AttentionStepDef, _structure_attention_step_de
 def _structure_step_def(val: object, _: type) -> StepDef:
     if isinstance(val, StepDef):
         return val
-    d = dict(val)
+    d = _as_dict(val)
     d.pop("kind", None)
     if "accept" in d:
         raise ValueError("step field 'accept' removed; drop it and use 'interaction:' (absence of 'offer: true' means seeker)")
@@ -403,7 +412,7 @@ _BARE_ATTENTION_EXCLUDES = ("interaction", "target", "target_pose", "cancel", "a
 def _structure_step_variant(val: object) -> StepDef | GoToStepDef | AttentionStepDef:
     if isinstance(val, (StepDef, GoToStepDef, AttentionStepDef)):
         return val
-    d = dict(val)
+    d = _as_dict(val)
     kind = d.get("kind")
     if kind is None:
         bare = "attention" in d and not any(k in d for k in _BARE_ATTENTION_EXCLUDES)
@@ -420,7 +429,7 @@ def _structure_step_variant(val: object) -> StepDef | GoToStepDef | AttentionSte
 def _structure_transition_def(val: object, _: type) -> TransitionDef:
     if isinstance(val, TransitionDef):
         return val
-    d = dict(val)
+    d = _as_dict(val)
     when = d["when"]
     if isinstance(when, str):
         raise ValueError(f"String-based transition condition '{when}' is not supported. Use dict[str, NeedCondition] instead.")
@@ -434,7 +443,7 @@ converter.register_structure_hook(TransitionDef, _structure_transition_def)
 def _structure_sequence_def(val: object, _: type) -> SequenceDef:
     if isinstance(val, SequenceDef):
         return val
-    d = dict(val)
+    d = _as_dict(val)
     if "steps" in d:
         d["steps"] = {k: _structure_step_variant(v) for k, v in d["steps"].items()}
     if "transitions" in d:
@@ -474,7 +483,7 @@ def _structure_tune_def(val: object) -> TuneDef:
     if isinstance(val, TuneDef):
         return val
     fields: dict[str, Poly] = {}
-    for key, v in dict(val).items():
+    for key, v in _as_dict(val).items():
         if key in ("perception", "local_planner_params"):
             if not isinstance(v, dict):
                 raise ValueError(f"tune {key}: expected a mapping")
@@ -492,7 +501,7 @@ def _structure_tune_def(val: object) -> TuneDef:
 def _structure_conditional_tune(val: object) -> ConditionalTune:
     if isinstance(val, ConditionalTune):
         return val
-    d = dict(val)
+    d = _as_dict(val)
     unknown = set(d) - {"when", "tune"}
     if unknown:
         raise ValueError(f"unknown tunes entry fields: {sorted(unknown)}")
@@ -505,7 +514,7 @@ converter.register_structure_hook(SequenceDef, _structure_sequence_def)
 def _structure_perception_dist(val: object, _: type) -> PerceptionDist:
     if isinstance(val, PerceptionDist):
         return val
-    return PerceptionDist(**dict(val))
+    return PerceptionDist(**_as_dict(val))
 
 
 converter.register_structure_hook(PerceptionDist, _structure_perception_dist)
@@ -530,7 +539,7 @@ def _sub_block(d: dict, key: str, allowed: tuple[str, ...]) -> dict:
 def _structure_locomotion_dist(val: object, _: type) -> LocomotionDist:
     if isinstance(val, LocomotionDist):
         return val
-    d = dict(val) if val is not None else {}
+    d = _as_dict(val) if val is not None else {}
     unknown = set(d) - set(_LOCOMOTION_KEYS)
     if unknown:
         raise ValueError(f"unknown locomotion fields: {sorted(unknown)}, expected {list(_LOCOMOTION_KEYS)}")
@@ -575,7 +584,7 @@ def _structure_local_planner_param(key: str, val: object) -> object:
 def _structure_agent_type(val: object, _: type) -> AgentType:
     if isinstance(val, AgentType):
         return val
-    d = dict(val)
+    d = _as_dict(val)
     if "perception" in d and isinstance(d["perception"], dict):
         d["perception"] = converter.structure(d["perception"], PerceptionDist)
     if "local_planner_params" in d and isinstance(d["local_planner_params"], dict):
@@ -611,7 +620,7 @@ converter.register_structure_hook(AgentType, _structure_agent_type)
 def _structure_var_def(val: object, _: type) -> VarDef:
     if isinstance(val, VarDef):
         return val
-    return VarDef(**val)
+    return VarDef(**_as_dict(val))
 
 
 converter.register_structure_hook(VarDef, _structure_var_def)

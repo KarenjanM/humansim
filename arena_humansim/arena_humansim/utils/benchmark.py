@@ -15,6 +15,7 @@ from typing import Any
 import attrs
 import numpy as np
 import rclpy
+import rclpy.executors
 import yaml
 from ament_index_python.packages import get_package_share_directory
 from arena_humansim_msgs.msg import AgentFrame as AgentFrameMsg
@@ -133,9 +134,9 @@ class BenchmarkDriver(Node):
     def add_walls(self, segments: list[list[list[float]]]) -> None:
         req = AddWalls.Request()
         for i, seg in enumerate(segments):
-            req.names.append(f"bench_wall_{i}")
-            req.starts.append(Point32(x=float(seg[0][0]), y=float(seg[0][1]), z=0.0))
-            req.ends.append(Point32(x=float(seg[1][0]), y=float(seg[1][1]), z=0.0))
+            req.names.append(f"bench_wall_{i}")  # pyright: ignore[reportAttributeAccessIssue]
+            req.starts.append(Point32(x=float(seg[0][0]), y=float(seg[0][1]), z=0.0))  # pyright: ignore[reportAttributeAccessIssue]
+            req.ends.append(Point32(x=float(seg[1][0]), y=float(seg[1][1]), z=0.0))  # pyright: ignore[reportAttributeAccessIssue]
         resp = self._call_sync(self._add_walls_cli, req, timeout=10.0)
         if resp is None or not resp.success:
             raise RuntimeError(f"add_walls failed: {resp}")
@@ -156,7 +157,7 @@ class BenchmarkDriver(Node):
             n_agents=resp.n_agents,
         )
 
-    def spawn_random_agents(self, n: int, seed: int = 42, radius: float = 20.0, spawn_rect: SpawnRect | None = None) -> None:
+    def spawn_random_agents(self, n: int, seed: int = 42, radius: float = 20.0, spawn_rect: SpawnRect | None = None) -> Iterable[int]:
         rng = np.random.default_rng(seed)
         req = SpawnAgents.Request()
         for _ in range(n):
@@ -183,7 +184,7 @@ class BenchmarkDriver(Node):
             wp = WaypointMsg()
             wp.pose = Pose2D(x=gx, y=gy, theta=0.0)
             msg.waypoints = WaypointsMsg(points=[wp], mode=WaypointsMsg.MODE_ONCE)
-            req.agents.append(msg)
+            req.agents.append(msg)  # pyright: ignore[reportAttributeAccessIssue]
 
         resp = self._call_sync(self._spawn_cli, req, timeout=30.0)
         if resp is None or not resp.success:
@@ -273,7 +274,7 @@ class BenchmarkDriver(Node):
         msg.waypoints = WaypointsMsg(points=[wp], mode=WaypointsMsg.MODE_ONCE)
 
         req = SpawnAgents.Request()
-        req.agents.append(msg)
+        req.agents.append(msg)  # pyright: ignore[reportAttributeAccessIssue]
         resp = self._call_sync(self._spawn_cli, req, timeout=10.0)
         if resp is None or not resp.success:
             raise RuntimeError(f"Spawn failed: {resp}")

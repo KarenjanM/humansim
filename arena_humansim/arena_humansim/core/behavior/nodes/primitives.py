@@ -2,7 +2,7 @@ import numpy as np
 import py_trees
 
 from arena_humansim.core.agents import CONDITION, STEP, BaseAgent, ConditionalTune, ParamDist, TuneDef, retune
-from arena_humansim.core.behavior.nodes.helpers import _nav_command, _sample_param_dist
+from arena_humansim.core.behavior.nodes.helpers import _nav_command, _sample_param_dist, _set_command
 from arena_humansim.core.behavior.nodes.utility import preconditions_met
 from arena_humansim.core.behavior.step_context import StepContext
 from arena_humansim.utils import DT
@@ -86,7 +86,7 @@ class HoldNode(py_trees.behaviour.Behaviour):
         if not self._bound():
             cmd = _nav_command(self._agent, self._agent.state.pose)
             cmd.desired_velocity = 0.0
-            self._agent.movement.command = cmd
+            _set_command(self._agent, cmd)
         if self._elapsed >= self._duration:
             return py_trees.common.Status.SUCCESS
         self._elapsed += self._dt

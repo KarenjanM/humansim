@@ -15,6 +15,8 @@ from ..base import RobotPolicy, fetch_to_disk, policy_cache_dir
 from .obs import build_robot_node, build_spatial_edges, build_temporal_edge
 
 if TYPE_CHECKING:
+    from torch import Tensor
+
     from .model import SRNN
 
 _CHECKPOINT_URL = "https://github.com/Shuijing725/CrowdNav_DSRNN/raw/main/data/example_model_unicycle/checkpoints/55554.pt"
@@ -54,7 +56,7 @@ class DSRNNPlanner(RobotPolicy):
         self._device = None
         self._torch = None
 
-        self._hidden: dict[int, dict[str, object]] = {}
+        self._hidden: dict[int, dict[str, Tensor]] = {}
         self._desired_v: dict[int, float] = {}
         self._theta: dict[int, float] = {}
 
@@ -132,7 +134,7 @@ class DSRNNPlanner(RobotPolicy):
         self._model = model
         self._logger.info(f"Loaded DS-RNN checkpoint from {self._checkpoint_path} on {self._device_str}")
 
-    def _get_or_init_state(self, agent: BaseAgent) -> tuple[dict[str, object], float, float]:
+    def _get_or_init_state(self, agent: BaseAgent) -> tuple[dict[str, Tensor], float, float]:
         aid = agent.state.agent_id
         hxs = self._hidden.get(aid)
         if hxs is None:

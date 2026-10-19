@@ -113,7 +113,7 @@ def _zanlungo_kernel(
         walls = near_walls(grid, x, y, _WALL_QUERY_RANGE) if speed >= _EPS else np.empty(0, dtype=np.int64)
         k = 0
         for w in walls:
-            px, py = wall_point(seg, w, x, y)
+            px, py = wall_point(seg, w, x, y)  # pyright: ignore[reportArgumentType]
             if (x - px) ** 2 + (y - py) ** 2 <= _WALL_QUERY_RANGE * _WALL_QUERY_RANGE:
                 walls[k] = w
                 k += 1

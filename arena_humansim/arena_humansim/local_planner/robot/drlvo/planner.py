@@ -63,7 +63,7 @@ class DRLVOPlanner(RobotPolicy):
 
         self._scan_history = ScanHistory(num_beams=self._num_beams)
 
-        self._model = None  # type: ignore[assignment]
+        self._model = None
 
     def apply_policy_params(self, params_json: str) -> None:
         if not params_json:

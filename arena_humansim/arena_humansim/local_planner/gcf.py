@@ -267,9 +267,9 @@ def _gcf_kernel(
             ny = oy / d
             cj = cos_t[j]
             sj = sin_t[j]
-            if d - _support(ai, bi, ci, si, nx, ny) - _support(aj, bj, cj, sj, nx, ny) >= max_dist:
+            if d - _support(ai, bi, ci, si, nx, ny) - _support(aj, bj, cj, sj, nx, ny) >= max_dist:  # pyright: ignore[reportArgumentType]
                 continue
-            eff = d - closest_approach(ai, bi, ci, si, aj, bj, cj, sj, -nx, -ny)
+            eff = d - closest_approach(ai, bi, ci, si, aj, bj, cj, sj, -nx, -ny)  # pyright: ignore[reportArgumentType]
             if eff >= max_dist:
                 continue
             fov = max(-(vx * nx + vy * ny), 0.0) / speed if speed > _EPS else 0.0

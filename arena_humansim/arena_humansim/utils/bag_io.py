@@ -2,6 +2,7 @@ import itertools
 import struct
 import warnings
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -40,7 +41,7 @@ def policy_names(meta_t: np.ndarray, meta_policies: list[list[str]], frame_t: np
     return table[np.where(valid, offsets[kc] + pidx, len(table) - 1)]
 
 
-def _frame_rows(frames: list[tuple[int, object]], metas: list[tuple[int, list[str]]]) -> pd.DataFrame:
+def _frame_rows(frames: list[tuple[int, Any]], metas: list[tuple[int, list[str]]]) -> pd.DataFrame:
     msgs = [m for _, m in frames]
     counts = np.array([len(m.agent_id) for m in msgs], dtype=np.int64)
     frame_t = np.array([t for t, _ in frames], dtype=np.int64)
@@ -62,7 +63,7 @@ def _frame_rows(frames: list[tuple[int, object]], metas: list[tuple[int, list[st
 
 def extract_agent_states(bag_path: Path) -> pd.DataFrame:
     extracted_data = []
-    frames: list[tuple[int, object]] = []
+    frames: list[tuple[int, Any]] = []
     metas: list[tuple[int, list[str]]] = []
     with AnyReader([bag_path]) as reader:
         connections = [c for c in reader.connections if ("agent_states" in c.topic and c.msgtype in (AGENT_STATES_TYPE, AGENT_FRAME_TYPE)) or c.msgtype == AGENT_META_TYPE]
@@ -71,9 +72,10 @@ def extract_agent_states(bag_path: Path) -> pd.DataFrame:
                 if _frame_size(rawdata):
                     frames.append((timestamp, reader.deserialize(rawdata, connection.msgtype)))
             elif connection.msgtype == AGENT_META_TYPE:
-                metas.append((timestamp, list(reader.deserialize(rawdata, connection.msgtype).policies)))
+                meta: Any = reader.deserialize(rawdata, connection.msgtype)
+                metas.append((timestamp, list(meta.policies)))
             else:
-                msg = reader.deserialize(rawdata, connection.msgtype)
+                msg: Any = reader.deserialize(rawdata, connection.msgtype)
                 time_sec = timestamp * 1e-9
                 for agent in msg.agents:
                     extracted_data.append(

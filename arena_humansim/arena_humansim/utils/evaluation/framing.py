@@ -30,10 +30,10 @@ def pick_framing(head_df: pd.DataFrame, threshold: float = 1.2) -> dict:
     het = by_bucket.get("het")
     pooled = by_bucket.get("all")
 
-    K_nav = float(nav["ratio_K"])
-    K_bt = float(bt["ratio_K"]) if bt is not None else float("nan")
-    K_het = float(het["ratio_K"]) if het is not None else float("nan")
-    K_pooled = float(pooled["ratio_K"]) if pooled is not None else float("nan")
+    K_nav = float(nav["ratio_K"])  # pyright: ignore[reportArgumentType]
+    K_bt = float(bt["ratio_K"]) if bt is not None else float("nan")  # pyright: ignore[reportArgumentType]
+    K_het = float(het["ratio_K"]) if het is not None else float("nan")  # pyright: ignore[reportArgumentType]
+    K_pooled = float(pooled["ratio_K"]) if pooled is not None else float("nan")  # pyright: ignore[reportArgumentType]
 
     bt_clears = not np.isnan(K_bt) and K_bt >= K_nav * threshold
     het_clears = not np.isnan(K_het) and K_het >= K_nav * threshold
@@ -50,11 +50,11 @@ def pick_framing(head_df: pd.DataFrame, threshold: float = 1.2) -> dict:
     return {
         "recommended": rec,
         "threshold": threshold,
-        "X_nav": float(nav["within_class_mean"]),
+        "X_nav": float(nav["within_class_mean"]),  # pyright: ignore[reportArgumentType]
         "K_nav": K_nav,
         "K_bt": K_bt,
         "K_het": K_het,
-        "X_pooled": float(pooled["within_class_mean"]) if pooled is not None else float("nan"),
+        "X_pooled": float(pooled["within_class_mean"]) if pooled is not None else float("nan"),  # pyright: ignore[reportArgumentType]
         "K_pooled": K_pooled,
         "bt_clears": bt_clears,
         "het_clears": het_clears,

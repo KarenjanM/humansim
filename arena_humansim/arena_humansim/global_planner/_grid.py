@@ -22,7 +22,7 @@ def grid_to_world(origin: Pose2D, resolution: float, row: int, col: int) -> Pose
 
 
 def label_free_cells(grid: np.ndarray) -> np.ndarray:
-    return label(grid == 0, structure=np.ones((3, 3), dtype=bool))[0]
+    return label(grid == 0, structure=np.ones((3, 3), dtype=bool))[0]  # pyright: ignore[reportIndexIssue]
 
 
 def nearest_reachable_cell(labels: np.ndarray, origin: Pose2D, resolution: float, start: tuple[int, int], target: Pose2D) -> Pose2D:

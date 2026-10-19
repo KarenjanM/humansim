@@ -27,7 +27,7 @@ _TF_DENSE_LAYERS = {
 
 
 def _list_tf_vars(prefix: str) -> dict[str, np.ndarray]:
-    import tensorflow as tf  # type: ignore[import-not-found]
+    import tensorflow as tf
 
     reader = tf.train.load_checkpoint(prefix)
     shapes = reader.get_variable_to_shape_map()

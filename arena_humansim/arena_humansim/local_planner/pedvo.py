@@ -6,7 +6,7 @@ import math
 
 import numpy as np
 from numba import njit, prange
-from scipy.spatial import cKDTree
+from scipy.spatial import cKDTree  # pyright: ignore[reportAttributeAccessIssue]
 
 from arena_humansim.core.pool import AgentPool
 from arena_humansim.utils.wall_grid import query_walls

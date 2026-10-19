@@ -36,6 +36,7 @@ __all__ = [
 import math
 from collections.abc import Iterable, Mapping
 from pathlib import Path
+from typing import overload
 
 import attrs
 import numpy as np
@@ -56,6 +57,12 @@ class ParamDist:
         return attrs.evolve(self, mean=mean, clip_low=max(self.clip_low + delta, min(self.clip_low, mean)), clip_high=self.clip_high + delta)
 
 
+@overload
+def _as_paramdist(val: None) -> None: ...
+@overload
+def _as_paramdist(val: "ParamDist | float | Mapping[str, float]") -> "ParamDist": ...
+@overload
+def _as_paramdist(val: object) -> "ParamDist | None": ...
 def _as_paramdist(val: object) -> "ParamDist | None":
     if val is None:
         return None

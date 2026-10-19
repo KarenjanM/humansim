@@ -131,7 +131,7 @@ def _compute_one_robot_metrics(
     robot_id: int,
     goal: tuple[float, float] | None,
 ) -> dict[str, float]:
-    robot = trial_df[trial_df["agent_id"] == robot_id].sort_values("time")
+    robot = trial_df[trial_df["agent_id"] == robot_id].sort_values("time")  # pyright: ignore[reportCallIssue]
     if robot.empty:
         return dict(_NAN_ROBOT_METRICS)
 
@@ -175,14 +175,14 @@ def _compute_one_robot_metrics(
         rb = frame[frame["agent_id"] == robot_id]
         if rb.empty:
             continue
-        rb_x = float(rb["x"].iloc[0])
-        rb_y = float(rb["y"].iloc[0])
+        rb_x = float(rb["x"].iloc[0])  # pyright: ignore[reportAttributeAccessIssue]
+        rb_y = float(rb["y"].iloc[0])  # pyright: ignore[reportAttributeAccessIssue]
         others = frame[frame["agent_id"] != robot_id]
         if others.empty:
             continue
-        ox = others["x"].to_numpy()
-        oy = others["y"].to_numpy()
-        orad = others["radius"].to_numpy()
+        ox = others["x"].to_numpy()  # pyright: ignore[reportAttributeAccessIssue]
+        oy = others["y"].to_numpy()  # pyright: ignore[reportAttributeAccessIssue]
+        orad = others["radius"].to_numpy()  # pyright: ignore[reportAttributeAccessIssue]
         d = np.hypot(ox - rb_x, oy - rb_y)
         collisions = d < (radius + orad)
         if collisions.any():
@@ -352,6 +352,6 @@ def run_robots_analysis(
     print()
     print("=== Robots (mean +/- 95% bootstrap CI) by robot_policy x bucket ===")
     summary_cols = ["robot_policy", "bucket", "n_trials", "success_mean", "success_ci_lo", "success_ci_hi", "ttg_ratio_mean", "psv_per_sec_mean"]
-    print(by_pb[summary_cols].to_string(index=False, float_format="{:.3f}".format))
+    print(by_pb[summary_cols].to_string(index=False, float_format="{:.3f}".format))  # pyright: ignore[reportArgumentType]
 
     return {"per_trial": per_trial, "cell": cell, "by_policy": by_policy, "by_policy_bucket": by_pb}

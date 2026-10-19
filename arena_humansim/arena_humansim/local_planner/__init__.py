@@ -8,7 +8,7 @@ import attrs
 
 from arena_humansim.core.agents import BaseAgent
 from arena_humansim.core.agents.types import ParamDist
-from arena_humansim.core.pool import PoolAware
+from arena_humansim.core.pool import AgentPool, PoolAware
 from arena_humansim.utils import ModuleRegistry
 from arena_humansim.utils.loggable import Loggable
 from arena_humansim.utils.types import Pose2D, WallAware
@@ -51,6 +51,9 @@ class LocalPlanner(PoolAware, WallAware, Loggable, ABC):
         global_goals: dict[int, Pose2D],
         dt: float = 1.0,
     ) -> dict[int, tuple[float, float]]: ...
+
+    def compute_pool(self, pool: AgentPool, store_forces: bool = False, dt: float = 1.0) -> None:
+        raise NotImplementedError
 
     def publish_markers(self, pub: MarkerPublisher) -> None:
         pass

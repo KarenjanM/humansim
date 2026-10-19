@@ -471,7 +471,8 @@ def _ride(
     name_lookup: NameLookup | None,
 ) -> py_trees.behaviour.Behaviour:
     """Wrap the compiled steps with the sequence-level attention rider when the sequence declares one."""
-    if seq_def.attention is None:
+    attention = seq_def.attention
+    if attention is None:
         return steps
     w = _wiring(seq_name, world, agent_lookup, name_lookup, rng, dt)
     ctx = StepContext(is_bound_lookup=is_bound_lookup, im=im)
@@ -480,7 +481,7 @@ def _ride(
         name=f"{seq_name}/rider",
         steps=steps,
         step_infos=infos,
-        make_rider=lambda walking: _attention_node(seq_name, agent, seq_def.attention, w, ctx, walking=walking),
+        make_rider=lambda walking: _attention_node(seq_name, agent, attention, w, ctx, walking=walking),
     )
 
 

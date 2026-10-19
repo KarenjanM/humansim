@@ -97,22 +97,22 @@
     "crowd_crossing": {
       "wheelchair_manual": {
         "success_rate": 1.0,
-        "time_to_goal_s": 10.400000000000002,
-        "time_stuck_s": 0.05,
-        "path_efficiency": 0.9673626412059262,
-        "min_clearance_m": 0.008455727426346038,
-        "min_clearance_worst_m": -1.7311764061778145e-05,
+        "time_to_goal_s": 10.625,
+        "time_stuck_s": 0.025,
+        "path_efficiency": 0.960246798283006,
+        "min_clearance_m": -5.551115123125783e-17,
+        "min_clearance_worst_m": -1.6653345369377348e-16,
         "max_wall_penetration_m": 0.0,
         "max_wall_penetration_worst_m": 0.0,
         "recovery_events": 0.0
       },
       "adult": {
         "success_rate": 1.0,
-        "time_to_goal_s": 7.9,
+        "time_to_goal_s": 8.275,
         "time_stuck_s": 0.0,
-        "path_efficiency": 0.9829408176291985,
-        "min_clearance_m": 0.03316814784182898,
-        "min_clearance_worst_m": -0.0007181769660281612,
+        "path_efficiency": 0.9774986829875096,
+        "min_clearance_m": 0.022078569383578883,
+        "min_clearance_worst_m": -0.0024390095709357906,
         "max_wall_penetration_m": 0.0,
         "max_wall_penetration_worst_m": 0.0,
         "recovery_events": 0.0

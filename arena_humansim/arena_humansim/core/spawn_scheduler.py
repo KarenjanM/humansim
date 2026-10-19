@@ -60,7 +60,7 @@ class SpawnScheduler(Loggable):
             if src.max_total > 0:
                 n = min(n, src.max_total - total)
             for _ in range(max(0, n)):
-                req = self._sample_spawn_request(src, tick_count, self._event_stream(f"{src.name}/event/{total}"))
+                req = self._sample_spawn_request(src, tick_count, total)
                 req.agent_id = self._allocate_id()
                 requests.append(req)
                 alive += 1
@@ -134,8 +134,9 @@ class SpawnScheduler(Loggable):
 
         return profile[-1].rate
 
-    def _sample_spawn_request(self, src: SourceConfig, tick_count: int, rng: np.random.Generator) -> SpawnRequest:
+    def _sample_spawn_request(self, src: SourceConfig, tick_count: int, seq: int) -> SpawnRequest:
         tmpl = src.agent
+        rng = self._event_stream(f"{src.name}/event/{seq}")
 
         pose = self._sample_pose_in_shape(src.pose, src.shape, rng)
 
@@ -156,6 +157,7 @@ class SpawnScheduler(Loggable):
 
         lifetime = AgentLifetime(
             source_name=src.name,
+            source_seq=seq,
             spawn_tick=tick_count,
             target_sink_name=target_sink_name,
         )

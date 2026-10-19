@@ -298,3 +298,19 @@ def test_crowd_overlap_converges_over_ticks_and_is_deterministic(pool_empty: Cal
     assert overlaps[4] < 0.05
     assert np.array_equal(run(4).pos, again.pos)
     assert np.array_equal(run(4).vel, again.vel)
+
+
+def test_far_robot_leaves_crowd_separation_unchanged(pool_empty: Callable[..., AgentPool], agent_factory: Callable[..., BaseAgent]) -> None:
+    rng = np.random.default_rng(3)
+    positions = [(float(x), float(y)) for x, y in rng.uniform(0.0, 3.0, size=(40, 2))]
+
+    def separated(robot: bool) -> dict[int, tuple[float, float, float, float]]:
+        pool = _contact_pool(pool_empty, agent_factory, positions, [True] * len(positions))
+        if robot:
+            idx = pool.add_agent(agent_factory(-1, x=50.0, y=50.0))
+            pool.agent_radius[idx] = 0.6
+            pool.policy_idx[idx] = -1
+        WallProjectionResolver(margin=_MARGIN).resolve(pool)
+        return {int(pool.agent_ids[i]): (*pool.pos[i], *pool.vel[i]) for i in range(pool.n) if pool.agent_ids[i] > 0}
+
+    assert separated(robot=True) == separated(robot=False)

@@ -340,6 +340,7 @@ class FlowConfig:
 class AgentLifetime:
     agent_id: int = 0
     source_name: str = ""  # which source spawned this agent ("" if explicit)
+    source_seq: int = 0
     spawn_tick: int = 0  # tick when agent was created
     max_lifetime_s: float = -1  # -1 = no TTL
     target_sink_name: str = ""  # "" = no sink target

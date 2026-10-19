@@ -32,7 +32,7 @@ GATES = {
     "doorway": Gate(baseline_time_ratio=1.2284, r_time=1.5355, s_stuck_s=2.0250, e_efficiency=0.0505),
     "corridor_head_on_adult": Gate(baseline_time_ratio=1.2211, r_time=1.5264, s_stuck_s=2.0500, e_efficiency=0.0379),
     "corridor_head_on_robot": Gate(baseline_time_ratio=1.2738, r_time=1.5922, s_stuck_s=2.4500, e_efficiency=0.0172),
-    "crowd_crossing": Gate(baseline_time_ratio=1.3165, r_time=1.6456, s_stuck_s=2.0500, e_efficiency=0.0656),
+    "crowd_crossing": Gate(baseline_time_ratio=1.2840, r_time=1.6050, s_stuck_s=2.0250, e_efficiency=0.0673),
     "corridor_u_turn": Gate(baseline_time_ratio=1.3029, r_time=1.6287, s_stuck_s=3.4250, e_efficiency=0.0435),
     "robot_parked": Gate(baseline_time_ratio=1.1637, r_time=1.4546, s_stuck_s=2.0250, e_efficiency=0.0302),
 }

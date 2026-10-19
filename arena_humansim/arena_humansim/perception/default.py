@@ -111,6 +111,7 @@ class DefaultPerception(Perception):
         counts = mask.sum(axis=1)
         indptr = np.zeros(n + 1, dtype=np.int32)
         np.cumsum(counts, out=indptr[1:])
+        col = col[np.lexsort((pool.agent_ids[col], row))]
         pool.set_neighbor_csr(indptr, col.astype(np.int32))
 
     def _compute_pool_kdtree(self, pool: AgentPool, positions: np.ndarray, n: int) -> None:
@@ -167,7 +168,7 @@ class DefaultPerception(Perception):
         indptr = np.zeros(n + 1, dtype=np.int32)
         np.cumsum(counts, out=indptr[1:])
 
-        order = np.argsort(row, kind="stable")
+        order = np.lexsort((pool.agent_ids[col], row))
         indices = col[order].astype(np.int32)
 
         pool.set_neighbor_csr(indptr, indices)

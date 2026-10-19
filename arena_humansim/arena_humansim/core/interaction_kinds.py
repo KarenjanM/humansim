@@ -162,11 +162,11 @@ class _AgentStrategy(HandleStrategy):
 
     def can_create(self, im: InteractionManager, spec: SeekSpec, agent_id: int) -> bool:
         del im, agent_id
-        return isinstance(spec.target, int) and spec.target >= 0
+        return isinstance(spec.target, int) and spec.target != 0
 
     def populate_state(self, state: dict, target: str | int | None, creator_id: int) -> str | None:
         del creator_id
-        if isinstance(target, int) and target >= 0:
+        if isinstance(target, int) and target != 0:
             state["target_agent"] = target
         return None
 

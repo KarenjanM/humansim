@@ -486,7 +486,6 @@ class AgentManager(Node):
         self._interaction_scripts: list[InteractionScript] = []
         self._interaction_scripts_by_tick: dict[int, list[InteractionScript]] = {}
 
-        self._waypoint_rng = self._rng.get_substream("waypoint_advance")
         self._spawn_scheduler = SpawnScheduler(rng=self._rng, allocate_id=self._allocate_agent_id)
         self._despawn_monitor = DespawnMonitor()
         self._last_spawned_ids: list[int] = []
@@ -528,6 +527,7 @@ class AgentManager(Node):
         self._robot_service_advertiser = RobotServiceAdvertiser()
         self._cached_intermediate_goals: dict[int, Pose2D] = {}
         self._next_agent_id: int = 1
+        self._next_robot_id: int = -1
 
         self._agent_states_pub = self.create_publisher(
             AgentFrameMsg,
@@ -744,6 +744,11 @@ class AgentManager(Node):
     def _allocate_agent_id(self) -> int:
         aid = self._next_agent_id
         self._next_agent_id += 1
+        return aid
+
+    def _allocate_robot_id(self) -> int:
+        aid = self._next_robot_id
+        self._next_robot_id -= 1
         return aid
 
     def _widen_ints(self, params: list[Parameter]) -> list[Parameter]:
@@ -1046,8 +1051,7 @@ class AgentManager(Node):
         pending: list[tuple[int, AgentStateMsg]] = []
         for a in scenario.agents:
             if int(a.agent_id) == 0:
-                a.agent_id = self._next_agent_id
-                self._next_agent_id += 1
+                a.agent_id = self._allocate_robot_id() if int(a.kind) == int(AgentKind.ROBOT) else self._allocate_agent_id()
             if int(a.kind) == int(AgentKind.ROBOT) and a.services:
                 self._robot_service_advertiser.register(int(a.agent_id), a.services)
             msg = AgentStateMsg()
@@ -1434,6 +1438,7 @@ class AgentManager(Node):
         spawn_requests = self._spawn_scheduler.tick(self._tick_count, self._dt)
         for spawn_req in spawn_requests:
             aid = spawn_req.agent_id if spawn_req.agent_id > 0 else self._allocate_agent_id()
+            self._rng.bind_agent(aid, f"{spawn_req.lifetime.source_name}/{spawn_req.lifetime.source_seq}")
             agent = self._build_base_agent_from_spawn(aid, spawn_req)
             self._agents[aid] = agent
             idx = self._pool.add_agent(agent)
@@ -1941,7 +1946,7 @@ class AgentManager(Node):
                 idx += 1
             elif mv.mode == WaypointMode.RANDOM:
                 others = [j for j in range(n) if j != idx]
-                idx = int(self._waypoint_rng.choice(others))
+                idx = int(self._rng.get_agent_substream(agent.state.agent_id, "waypoints").choice(others))
 
             mv.index = idx
             aid = agent.state.agent_id
@@ -2246,8 +2251,7 @@ class AgentManager(Node):
 
     def _spawn_external_agent(self, agent_msg: AgentStateMsg) -> int:
         """Add a non-autonomous robot-kind pool entity mirroring an externally simulated body."""
-        aid = self._next_agent_id
-        self._next_agent_id += 1
+        aid = self._allocate_robot_id()
         agent = self._build_base_agent(aid, agent_msg, [])
         agent.state.kind = KIND_ROBOT
         self._agents[aid] = agent
@@ -2627,15 +2631,14 @@ class AgentManager(Node):
             self._logger.error(response.message)
             return response
         for agent_msg in request.agents:
+            kind = int(agent_msg.kind)
             aid = agent_msg.agent_id
             if aid == 0:
-                aid = self._next_agent_id
-                self._next_agent_id += 1
+                aid = self._allocate_robot_id() if kind == KIND_ROBOT else self._allocate_agent_id()
 
             waypoints = [Pose2D(x=pt.pose.x, y=pt.pose.y, theta=pt.pose.theta) for pt in agent_msg.waypoints.points]
             radii = [pt.radius for pt in agent_msg.waypoints.points]
 
-            kind = int(agent_msg.kind)
             policy_name = agent_msg.policy
             policy_params = agent_msg.policy_params
             if self._force_local_planner:
@@ -2698,6 +2701,8 @@ class AgentManager(Node):
             spawned_ids.append(aid)
             if aid >= self._next_agent_id:
                 self._next_agent_id = aid + 1
+            if aid <= self._next_robot_id:
+                self._next_robot_id = aid - 1
         response.success = True
         response.message = f"Spawned {len(spawned_ids)} agent(s)"
         response.spawned_ids = spawned_ids
@@ -2727,6 +2732,7 @@ class AgentManager(Node):
             self._interaction_manager.reset()
             self._event_bus.clear()
             self._next_agent_id = 1
+            self._next_robot_id = -1
             self._tick_count = 0
             response.success = True
             response.message = f"Removed all {count} agent(s)"
@@ -2786,6 +2792,7 @@ class AgentManager(Node):
         self._world_knowledge.clear()
         self._rng.reset()
         self._next_agent_id = 1
+        self._next_robot_id = -1
         self._tick_count = 0
         self._sim_time_ns = 0
         self._last_spawned_ids = []

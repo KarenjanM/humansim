@@ -124,10 +124,10 @@ def test_agent_strategy_requires_integer_target() -> None:
     assert interaction.participants == [1]
 
 
-def test_agent_strategy_negative_target_rejected() -> None:
+def test_agent_strategy_zero_target_rejected() -> None:
     agents = {1: _FakeAgent(1)}
     mgr = _mk_mgr(agents)
-    mgr.update({1: _seek(1, InteractionType.BLOCK, target=-1)})
+    mgr.update({1: _seek(1, InteractionType.BLOCK, target=0)})
     assert len(mgr.interactions) == 0
 
 

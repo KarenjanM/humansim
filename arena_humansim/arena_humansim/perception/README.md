@@ -22,7 +22,7 @@ class Perception(Loggable, ABC):
 
 - `compute` (per-agent) is the fallback used in tests and off the hot path.
 - `supports_pool=True` + `compute_pool(pool)` is the hot path. It writes a CSR (`indptr`, `indices`) into `pool.set_neighbor_csr`. `AgentManager` consumes this directly.
-- The CSR encodes directional visibility: `indptr[i]:indptr[i+1]` lists the agent_ids that *agent i sees*. It is not symmetric - observer-A may see B without B seeing A.
+- The CSR encodes directional visibility: `indptr[i]:indptr[i+1]` lists the agent_ids that *agent i sees*, in agent id order. It is not symmetric - observer-A may see B without B seeing A.
 
 ## `proximity_sense` bypasses FOV
 

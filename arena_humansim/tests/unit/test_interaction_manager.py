@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from arena_humansim.core.formation import Formation
+from arena_humansim.core.formation.anchor import AgentAnchor
 from arena_humansim.core.interaction_kinds import InteractionType
 from arena_humansim.core.interaction_manager import CommandType, InteractionManager
 from arena_humansim.core.world_knowledge import WorldKnowledge, WorldObject
@@ -15,7 +16,9 @@ from arena_humansim.utils.rng import RNG
 from arena_humansim.utils.types import (
     AgentKind,
     AgentState,
+    AnchorKind,
     BehaviorTreeMovement,
+    FormationSpec,
     HighLevelCommand,
     InteractionContract,
     InteractionOutcome,
@@ -100,8 +103,9 @@ def _mk_mgr(
     *,
     world: WorldKnowledge | None = None,
     visibility: dict[int, set[int]] | None = None,
+    seed: int = 0,
 ) -> InteractionManager:
-    mgr = InteractionManager(RNG(0))
+    mgr = InteractionManager(RNG(seed))
     agents = agents or {}
     vis = visibility if visibility is not None else {aid: set(agents) - {aid} for aid in agents}
     mgr.set_context(
@@ -265,8 +269,7 @@ def test_queue_length_for_object_sums_across_interactions() -> None:
 def test_update_with_seeded_rng_is_deterministic() -> None:
     def run(seed: int) -> list[int]:
         agents = {i: _fake_bt_agent(i, x=float(i) * 0.5) for i in (1, 2, 3, 4, 5)}
-        mgr = _mk_mgr(agents)
-        mgr._rng = RNG(seed).get_substream("interaction_manager")
+        mgr = _mk_mgr(agents, seed=seed)
         iid1 = _seed_interaction(mgr, 1, InteractionType.GROUP_CONVERSATION)
         mgr.interactions[iid1].outcome = InteractionOutcome.ACTIVE
         iid2 = _seed_interaction(mgr, 2, InteractionType.GROUP_CONVERSATION)
@@ -285,12 +288,44 @@ def test_update_with_seeded_rng_is_deterministic() -> None:
     assert run(123) == run(123)
 
 
+def test_update_order_of_pedestrian_commands_ignores_robot_command() -> None:
+    def run(seed: int, robot: bool) -> list[list[int]]:
+        agents = {i: _fake_bt_agent(i, x=float(i) * 0.5) for i in (1, 2, 3, 4, 5)}
+        agents[-1] = _fake_robot_agent(-1, x=50.0)
+        mgr = _mk_mgr(agents, seed=seed)
+        _seed_interaction(mgr, 1, InteractionType.TALK_TO)
+        cmds = {aid: _seek_cmd(aid, InteractionType.TALK_TO) for aid in (3, 4, 5)}
+        extra = [HighLevelCommand(agent_id=-1, type=CommandType.STOP)] if robot else None
+        mgr.update(cmds, extra_commands=extra)
+        return [list(mgr.interactions[i].participants) for i in sorted(mgr.interactions)]
+
+    for seed in range(20):
+        assert run(seed, robot=True) == run(seed, robot=False), f"seed {seed}"
+
+
 def test_service_offer_records_provider() -> None:
     mgr = _mk_mgr({42: _fake_robot_agent(42)})
     iid = _seed_interaction(mgr, 42, InteractionType.SERVICE, target="water", offer=True)
     interaction = mgr.interactions[iid]
     assert interaction.provider == 42
     assert interaction.service_tag == "water"
+
+
+def test_block_on_robot_admits_only_its_negative_id() -> None:
+    mgr = _mk_mgr({1: _fake_bt_agent(1), 2: _fake_bt_agent(2), -1: _fake_robot_agent(-1)})
+    iid = _seed_interaction(mgr, 1, InteractionType.BLOCK, target=-1)
+    assert mgr.interactions[iid].target_agent == -1
+    assert mgr.accept(2, iid) is False
+    assert mgr.accept(-1, iid) is True
+
+
+def test_agent_anchor_resolves_negative_robot_id() -> None:
+    mgr = _mk_mgr({1: _fake_bt_agent(1), -1: _fake_robot_agent(-1, x=2.0)})
+    iid = _seed_interaction(mgr, 1, InteractionType.GROUP_CONVERSATION)
+    anchor = mgr._anchor_from_spec(FormationSpec(type="cluster", anchor_kind=AnchorKind.AGENT, anchor_ref="-1"), mgr.interactions[iid])
+    assert isinstance(anchor, AgentAnchor)
+    assert anchor.agent_id == -1
+    assert mgr._anchor_from_spec(FormationSpec(type="cluster", anchor_kind=AnchorKind.AGENT, anchor_ref="0"), mgr.interactions[iid]) is None
 
 
 def test_talk_caps_at_two_participants() -> None:

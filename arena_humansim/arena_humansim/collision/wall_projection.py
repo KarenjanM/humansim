@@ -240,12 +240,17 @@ class WallProjectionResolver(CollisionResolver):
         n = pool.n
         if n < 2:
             return
+        pos = pool.pos[:n]
         radius = pool.agent_radius[:n]
         offset = pool.axial_offset[:n]
-        pairs = cKDTree(pool.pos[:n]).query_pairs(2.0 * float(radius.max()) + 2.0 * float(offset.max()), output_type="ndarray")
+        pairs = cKDTree(pos).query_pairs(2.0 * float(radius.max()) + 2.0 * float(offset.max()), output_type="ndarray")
         if len(pairs) == 0:
             return
-        _separate_kernel(pool.pos[:n], pool.vel[:n], radius, pool.policy_idx[:n] != -1, pairs.astype(np.int64), offset, pool.theta[:n])
+        i, j = pairs[:, 0], pairs[:, 1]
+        pairs = pairs[np.hypot(pos[i, 0] - pos[j, 0], pos[i, 1] - pos[j, 1]) < radius[i] + radius[j] + offset[i] + offset[j]]
+        ids = pool.agent_ids[:n][pairs]
+        pairs = pairs[np.lexsort((ids.max(axis=1), ids.min(axis=1)))]
+        _separate_kernel(pos, pool.vel[:n], radius, pool.policy_idx[:n] != -1, pairs.astype(np.int64), offset, pool.theta[:n])
 
     def _project(self, pool: AgentPool) -> set[int]:
         n = pool.n

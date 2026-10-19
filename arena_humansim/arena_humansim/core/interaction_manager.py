@@ -159,7 +159,6 @@ class InteractionManager(Loggable):
         self._agent_membership: dict[int, dict[int, MembershipRole]] = {}
         self._interaction_by_object_type: dict[tuple[str, int], int] = {}
         self._interactions_by_type: dict[int, set[int]] = {}
-        self._rng = rng_manager.get_substream("interaction_manager")
         self._world_knowledge = world_knowledge
         self._agent_lookup: AgentLookup = agent_lookup or (lambda _aid: None)
         self._visibility_lookup: VisibilityLookup | None = None
@@ -352,7 +351,7 @@ class InteractionManager(Loggable):
         if interaction is None:
             return False
         target = interaction.target_agent
-        if target is not None and target >= 0 and target != agent_id:
+        if target is not None and target != agent_id:
             return False
         if agent_id in interaction.participants:
             return True
@@ -479,7 +478,7 @@ class InteractionManager(Loggable):
                 if isinstance(cmd, HighLevelCommand) and cmd.type != CommandType.NAVIGATE:
                     interaction_cmds.append(cmd)
 
-        self._rng.shuffle(interaction_cmds)
+        interaction_cmds.sort(key=lambda c: self.rng_manager.get_agent_substream(c.agent_id, "interaction_order").random())
         # Providers create before seekers match, so same-tick offers become visible.
         interaction_cmds.sort(key=lambda c: 0 if (c.spec is not None and c.spec.offer) else 1)
 
@@ -1021,13 +1020,13 @@ class InteractionManager(Loggable):
             try:
                 aid = int(spec.anchor_ref)
             except (TypeError, ValueError):
-                aid = -1
-            if aid < 0:
+                return None
+            if aid == 0:
                 return None
             return AgentAnchor(pose_lookup=self._pose_lookup, agent_id=aid)
         if kind is AnchorKind.PROVIDER:
             provider_id = interaction.provider
-            if isinstance(provider_id, int) and provider_id >= 0:
+            if provider_id is not None:
                 return AgentAnchor(pose_lookup=self._pose_lookup, agent_id=provider_id)
             return None
         if kind is AnchorKind.LEADER:

@@ -301,3 +301,18 @@ def test_compute_pool_fov_matches_arctan2_reference(n: int, extent: float, seed:
         got = _csr_neighbors(pool, r)
         assert len(got) == len(set(got)), f"duplicate neighbors at row {r}: {got}"
         assert set(got) == reference[r], f"row {r}: got={sorted(got)} reference={sorted(reference[r])}"
+
+
+def test_far_agent_leaves_neighbor_order_unchanged() -> None:
+    rng = np.random.default_rng(4)
+    positions = rng.uniform(-6.0, 6.0, size=(80, 2))
+
+    def neighbors(robot: bool) -> dict[int, list[int]]:
+        agents = [_make_agent(-1, 100.0, 100.0)] if robot else []
+        agents += [_make_agent(k + 1, float(x), float(y)) for k, (x, y) in enumerate(positions)]
+        pool = _pool_from(agents)
+        DefaultPerception().compute_pool(pool)
+        ids = pool.agent_ids
+        return {int(ids[r]): [int(ids[c]) for c in _csr_neighbors(pool, r)] for r in range(pool.n) if ids[r] > 0}
+
+    assert neighbors(robot=True) == neighbors(robot=False)

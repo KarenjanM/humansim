@@ -57,6 +57,7 @@ _ENDED_OUTCOMES: frozenset[int] = frozenset(
 _UNSET: Any = object()
 
 _HOLDING = "_holding"
+_DRIFT_LATCH_FRACTION = 0.5
 
 
 class LifecycleEdge(enum.IntEnum):
@@ -515,15 +516,21 @@ class InteractionManager(Loggable):
                 if anchor is None:
                     continue
                 formation = interaction.contract.formation
+                latched_at: dict[int, Pose2D] = interaction.state.setdefault("_drift_latched_at", {})
                 for aid in interaction.participants:
                     pose = self._pose_lookup(aid)
                     if pose is None:
                         continue
                     # an explicit slot can lie further from the object origin than the radius, so drift is measured from it
                     slot = formation.slot_of(aid) if formation is not None else None
-                    if pose_distance(pose, anchor if slot is None else slot) <= radius:
+                    target = anchor if slot is None else slot
+                    if aid in latched and pose_distance(target, latched_at[aid]) > radius * _DRIFT_LATCH_FRACTION:
+                        latched.discard(aid)
+                    distance = pose_distance(pose, target)
+                    if distance <= radius * _DRIFT_LATCH_FRACTION:
                         latched.add(aid)
-                    elif aid in latched:
+                        latched_at[aid] = target
+                    elif distance > radius and aid in latched:
                         victims.append((aid, iid))
             else:
                 poses = [(aid, p) for aid in interaction.participants if (p := self._pose_lookup(aid)) is not None]

@@ -59,7 +59,7 @@ Maintained in `_add_membership` / `_drop_membership` / `_create_interaction` / `
 
 Threshold is `kind.interaction_radius * cohesion_multiplier` (`InteractionManager.__init__`, default 1.2). Same radius as request-time proximity, scaled up slightly for engagement-bubble slack - an evicted agent is past the seek-match boundary by construction, so a re-seek on the next BT tick can't immediately rejoin without first walking back into range.
 
-A per-participant latch (`interaction.state["_drift_arrived"]`) gates eviction: a participant is only evictable after first being observed within the threshold. "Drift" applies to participants who arrived and then left, not to ones still inbound - without this latch, a freshly-`ACTIVE` interaction whose formation hasn't pulled members in yet would self-evict on tick 1.
+A per-participant latch (`interaction.state["_drift_arrived"]`) gates eviction: a participant is only evictable after first being observed within the threshold. "Drift" applies to participants who arrived and then left, not to ones still inbound - without this latch, a freshly-`ACTIVE` interaction whose formation hasn't pulled members in yet would self-evict on tick 1. Object-bound participants latch only within half the threshold of their slot, so a member still closing on its slot (a queue promotion to the front) is not evicted by jostling at the threshold, and a latched member whose slot moves by more than that (the line shifting up) unlatches until it reaches the new slot.
 
 Eviction surgically drops the offender from one interaction; if the participant count falls below `min_participants`, `stop()` cascades into `_teardown(INTERRUPTED)` as usual.
 
@@ -75,7 +75,7 @@ Each keyword is optional (sentinel `_UNSET`). It no-ops unless a field actually 
 
 ## Formation ticks
 
-A formation tick is an `update(..., formations=True)` call. The agent manager makes one on the tick before each BT tick, the only ticks whose formation targets reach the global planner, and passes the time since the previous one as `dt`. Active formations advance grouped by type through `Formation.tick_all(formations, dt)`, which calls `tick` on each unless the type batches its members (`WalkFormation` senses walls and crowding for every group in one kernel call). Every formation gets the manager's `Clearance` as `formation.clearance`: free room along rays to the walls, and crowding among an observer's perceived agents. `Formation.speeds()` replaces the desired speed of its members until the next formation tick.
+A formation tick is an `update(..., formations=True)` call. The agent manager makes one on the tick before each BT tick, the only ticks whose formation targets reach the global planner, and passes the time since the previous one as `dt`. Active formations advance grouped by type through `Formation.tick_all(formations, dt)`, which calls `tick` on each unless the type batches its members (`WalkFormation` senses walls and crowding for every group in one kernel call). Every formation gets the manager's `Clearance` as `formation.clearance`: free room along rays to the walls, and crowding among an observer's perceived agents. `Formation.speeds()` replaces the desired speed of its members until the next formation tick. A `LineFormation` anchored on its front member (a mobile provider such as an escort) paces that member to its slowest follower's desired speed.
 
 ## Formation resolution
 

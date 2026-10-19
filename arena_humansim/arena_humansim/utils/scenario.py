@@ -54,8 +54,8 @@ class AgentConfig:
     spawn_pose: Pose2D = attrs.Factory(Pose2D)
     goal_sequence: list[Pose2D] = attrs.Factory(list)
     waypoint_mode: WaypointMode = WaypointMode.ONCE
-    desired_velocity: float = 1.3
-    agent_radius: float = 0.35
+    desired_velocity: float = 0.0
+    agent_radius: float = 0.0
     interaction_preferences: dict[str, Any] = attrs.Factory(dict)
     kind: int = 0  # 0=human, 1=robot (see AgentKind)
     policy: str = ""  # local planner name for robots; empty = teleport-only
@@ -93,9 +93,9 @@ class SinkAffinityModel:
 
 @attrs.define
 class AgentTemplateModel:
-    desired_velocity_min: float = 1.0
-    desired_velocity_max: float = 1.5
-    agent_radius: float = 0.35
+    desired_velocity_min: float = 0.0
+    desired_velocity_max: float = 0.0
+    agent_radius: float = 0.0
     agent_type: str = "adult"
     sink_affinity: list[SinkAffinityModel] = attrs.Factory(list)
 

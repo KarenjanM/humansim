@@ -299,9 +299,9 @@ class AgentKind(enum.IntEnum):
 
 @attrs.define
 class AgentTemplate:
-    desired_velocity_min: float = 1.0
-    desired_velocity_max: float = 1.5
-    agent_radius: float = 0.35
+    desired_velocity_min: float = 0.0
+    desired_velocity_max: float = 0.0
+    agent_radius: float = 0.0
     agent_type: str = "adult"
     sink_affinity: list[SinkAffinity] = attrs.Factory(list)
     kind: AgentKind = AgentKind.HUMAN

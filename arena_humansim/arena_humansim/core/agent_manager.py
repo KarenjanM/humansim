@@ -1233,6 +1233,8 @@ class AgentManager(Node):
         vel_val = agent_msg.desired_velocity
         if vel_val > 0.0:
             overrides["desired_velocity"] = vel_val
+            if vel_val > agent.params.max_velocity:
+                overrides["max_velocity"] = vel_val
 
         perception_overrides = {}
         for field_name in ("vision_range", "vision_fov"):
@@ -1457,7 +1459,7 @@ class AgentManager(Node):
                     agent_id=aid,
                     type=CommandType.NAVIGATE,
                     target_pose=mv.waypoints[mv.index],
-                    desired_velocity=spawn_req.desired_velocity,
+                    desired_velocity=agent.state.desired_velocity,
                 )
 
             if self._sim_logger is not None:
@@ -2688,7 +2690,7 @@ class AgentManager(Node):
                     agent_id=aid,
                     type=CommandType.NAVIGATE,
                     target_pose=mv.waypoints[mv.index],
-                    desired_velocity=agent_msg.desired_velocity,
+                    desired_velocity=agent.state.desired_velocity,
                 )
 
             if self._sim_logger is not None:

@@ -112,6 +112,15 @@ class LineFormation(Formation):
             return {s.agent_id: s.target for s in self._slots[1:]}
         return {s.agent_id: s.target for s in self._slots}
 
+    def speeds(self) -> dict[int, float]:
+        if len(self._slots) < 2 or not self._anchors_front():
+            return {}
+        lead = self.agent_lookup(self._slots[0].agent_id)
+        followers = [agent.state.desired_velocity for s in self._slots[1:] if (agent := self.agent_lookup(s.agent_id)) is not None]
+        if lead is None or not followers:
+            return {}
+        return {lead.state.agent_id: min(lead.state.desired_velocity, *followers)}
+
     def slot_of(self, agent_id: int) -> Pose2D | None:
         idx = next((i for i, s in enumerate(self._slots) if s.agent_id == agent_id), None)
         if idx is None or (idx == 0 and self._anchors_front()):

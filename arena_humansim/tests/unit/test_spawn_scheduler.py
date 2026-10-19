@@ -311,3 +311,12 @@ def test_max_rejects_rate_profile_and_missing_cap() -> None:
         sched.add_source(_make_source("s", max_concurrent=3, type=SourceType.MAX, profile=[RateKeyframe(t=0.0, rate=1.0)]))
     with pytest.raises(ValueError):
         sched.add_source(_make_source("s", type=SourceType.MAX))
+
+
+def test_template_without_speed_or_radius_requests_the_type_sample(rng) -> None:
+    sched = SpawnScheduler(rng.get_substream("sched"))
+    sched.add_source(_make_source("unset", rate=1000.0, max_concurrent=1))
+    sched.add_source(_make_source("pinned", rate=1000.0, max_concurrent=1, agent=AgentTemplate(desired_velocity_min=1.2, desired_velocity_max=1.2, agent_radius=0.3)))
+    reqs = {req.lifetime.source_name: req for req in sched.tick(0, 1.0)}
+    assert (reqs["unset"].desired_velocity, reqs["unset"].agent_radius) == (0.0, 0.0)
+    assert (reqs["pinned"].desired_velocity, reqs["pinned"].agent_radius) == (pytest.approx(1.2), 0.3)

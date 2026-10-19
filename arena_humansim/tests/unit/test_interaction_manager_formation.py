@@ -484,3 +484,68 @@ def test_queue_rotation_keeps_the_service_provider() -> None:
     assert interaction.outcome == InteractionOutcome.ACTIVE
     assert agents[2].movement.last_outcome == InteractionOutcome.COMPLETED
     assert agents[1].movement.last_outcome is None
+
+
+def _fountain() -> WorldKnowledge:
+    wk = WorldKnowledge()
+    line = FormationSpec(type="line", params={"base_step": 0.8, "front_offset": 0.8}, anchor_kind=AnchorKind.OBJECT)
+    wk.add_object(WorldObject(object_id="fountain", type="fountain", pose=Pose2D(x=4.0, y=0.0, theta=3.14159), capacity=2, formation=line))
+    return wk
+
+
+def test_promoted_member_closing_on_the_front_slot_is_not_evicted_and_keeps_its_turn() -> None:
+    agents = {
+        1: _FakeAgent(state=_FakeState(agent_id=1, pose=Pose2D(x=4.8, y=0.0))),
+        2: _FakeAgent(state=_FakeState(agent_id=2, pose=Pose2D(x=5.6, y=0.0))),
+    }
+    mgr = _mk_manager(agents, world=_fountain())
+    iid = _create(mgr, 1, InteractionType.USE, target="fountain", duration=0.5)
+    assert mgr.accept(2, iid) is True
+    mgr.update({}, dt=0.05)
+    mgr.update({}, dt=1.0)
+    assert mgr.interactions[iid].participants == [2]
+    for x in (5.39, 5.42, 5.40):
+        agents[2].state.pose = Pose2D(x=x, y=0.0)
+        mgr.update({}, dt=0.05)
+    assert mgr.interactions[iid].participants == [2]
+    assert mgr.accept(1, iid) is True
+    assert mgr.interactions[iid].contract.queue == [1]
+    agents[2].state.pose = Pose2D(x=4.8, y=0.0)
+    mgr.update({}, dt=0.05)
+    agents[2].state.pose = Pose2D(x=9.0, y=0.0)
+    mgr.update({}, dt=0.05)
+    assert agents[2].movement.last_outcome == InteractionOutcome.INTERRUPTED
+
+
+def test_latched_member_whose_slot_moves_up_is_not_evicted() -> None:
+    agents = {
+        1: _FakeAgent(state=_FakeState(agent_id=1, pose=Pose2D(x=4.8, y=0.0))),
+        2: _FakeAgent(state=_FakeState(agent_id=2, pose=Pose2D(x=5.6, y=0.0))),
+    }
+    mgr = _mk_manager(agents, world=_fountain())
+    iid = _create(mgr, 1, InteractionType.USE, target="fountain", max_participants=2)
+    assert mgr.accept(2, iid) is True
+    mgr.update({}, dt=0.05)
+    assert mgr.interactions[iid].participants == [1, 2]
+    assert mgr.interactions[iid].state["_drift_arrived"] == {1, 2}
+    mgr.stop(1, iid, reason=InteractionOutcome.COMPLETED)
+    mgr.update({}, dt=0.05)
+    assert mgr.interactions[iid].participants == [2]
+    assert mgr.interactions[iid].outcome == InteractionOutcome.ACTIVE
+
+
+def test_mobile_provider_line_paces_the_provider_to_its_slowest_passenger() -> None:
+    line = FormationSpec(type="line", params={"base_step": 0.8}, anchor_kind=AnchorKind.PROVIDER)
+    agents = {
+        1: _FakeAgent(state=_FakeState(agent_id=1, pose=Pose2D(x=0.0, y=0.0), desired_velocity=1.1)),
+        2: _FakeAgent(state=_FakeState(agent_id=2, pose=Pose2D(x=-0.8, y=0.0), desired_velocity=0.8)),
+    }
+    mgr = _mk_manager(agents)
+    iid = _create(mgr, 1, InteractionType.SERVICE, target="ride", offer=True, formation_spec=line, min_participants=2, max_participants=2)
+    assert mgr.accept(2, iid) is True
+    mgr.update({}, dt=0.05)
+    assert mgr.interactions[iid].outcome == InteractionOutcome.ACTIVE
+    assert mgr.formation_speeds() == {1: pytest.approx(0.8)}
+    agents[2].state.desired_velocity = 1.4
+    mgr.update({}, dt=0.05)
+    assert mgr.formation_speeds() == {1: pytest.approx(1.1)}

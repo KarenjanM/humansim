@@ -33,6 +33,8 @@ class Agent(NamedTuple):
     kind: int = 0
     name: str = ""
     handedness: str = ""
+    source_name: str = ""
+    source_seq: int = 0
 
 
 Frames = list[tuple[int, list[Agent]]]
@@ -86,6 +88,8 @@ def meta_msg(t_ns: int, agents: list[Agent], policies: list[str]) -> AgentMetaMs
     msg.agent_id = [a.agent_id for a in agents]
     msg.name = [a.name for a in agents]
     msg.handedness = [a.handedness for a in agents]
+    msg.source_name = [a.source_name for a in agents]
+    msg.source_seq = [a.source_seq for a in agents]
     return msg
 
 
@@ -110,7 +114,7 @@ def write_bag(bag_dir: Path, layout: str, frames: Frames, geometry: WorldGeometr
             writer.write("/agent_states", serialize_message(nested_msg(t_ns, agents)), t_ns)
             continue
         policies.extend(p for p in dict.fromkeys(a.policy for a in agents) if p and p not in policies)
-        key = (tuple(policies), tuple((a.agent_id, a.name, a.handedness) for a in agents))
+        key = (tuple(policies), tuple((a.agent_id, a.name, a.handedness, a.source_name, a.source_seq) for a in agents))
         if with_meta and key != last_meta:
             last_meta = key
             pending.append((t_ns, meta_msg(t_ns, agents, policies)))

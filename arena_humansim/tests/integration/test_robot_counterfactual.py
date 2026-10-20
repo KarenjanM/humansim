@@ -19,12 +19,16 @@ from arena_humansim.utils.scenario import (
     SourceScenarioConfig,
 )
 from arena_humansim.utils.types import Pose2D
+from arena_humansim_msgs.msg import AgentMeta as AgentMetaMsg
 from arena_humansim_msgs.msg import AgentState as AgentStateMsg
 from arena_humansim_msgs.msg import AgentStates as AgentStatesMsg
 from arena_humansim_msgs.msg import Waypoint as WaypointMsg
 from arena_humansim_msgs.msg import Waypoints as WaypointsMsg
 from arena_humansim_msgs.srv import SpawnAgents
 from geometry_msgs.msg import Pose2D as RosPose2D
+from rclpy.executors import SingleThreadedExecutor
+
+from ._capture import LATCHED, settle, spin_until, subscribe
 
 TICKS = 300
 ROBOT_Y = 200.0
@@ -32,6 +36,8 @@ EXTERNAL_ROBOT_ID = 0x2345678
 
 Population = dict[int, tuple[int, float, float, float]]
 Tracks = list[dict[int, tuple[float, float, float]]]
+Attribution = dict[int, tuple[str, int]]
+Releases = dict[tuple[str, int], tuple[int, bool, float, float, float]]
 
 
 def _source(x: float, sink_idx: int, max_concurrent: int) -> SourceScenarioConfig:
@@ -152,3 +158,60 @@ def test_robot_ids_count_down_outside_pedestrian_ids(manager_factory: Callable[.
     req.agents.extend([_agent_msg(-1, KIND_ROBOT, 0.0, 0.0), _agent_msg(0, KIND_ROBOT, 2.0, 0.0), _agent_msg(0, KIND_ROBOT, 4.0, 0.0), _agent_msg(0, KIND_HUMAN, 6.0, 0.0)])
     resp = mgr._spawn_agents_callback(req, SpawnAgents.Response())
     assert list(resp.spawned_ids) == [-1, -2, -3, 1]
+
+
+def _published_releases(mgr: AgentManager, robot: str) -> tuple[Attribution, Releases]:
+    """Source and release index each agent carries on the published agent_meta, and the spawn of every released agent by that pair."""
+    metas = subscribe(mgr, AgentMetaMsg, "agent_meta", LATCHED)
+    executor = SingleThreadedExecutor()
+    executor.add_node(mgr)
+    settle(executor)
+    _spawn(mgr, robot)
+    attribution: Attribution = {}
+    releases: Releases = {}
+    for _ in range(TICKS):
+        published = mgr._meta_published
+        mgr.tick()
+        if mgr._meta_published is not published:
+            count = len(metas) + 1
+            spin_until(executor, lambda count=count: len(metas) == count)
+            meta = metas[-1]
+            for aid, name, seq in zip(meta.agent_id, meta.source_name, meta.source_seq, strict=True):
+                assert attribution.setdefault(int(aid), (name, int(seq))) == (name, int(seq))
+        for aid in mgr._last_spawned_ids:
+            agent = mgr._agents[aid]
+            if attribution[aid][0]:
+                releases[attribution[aid]] = (mgr._tick_count, agent.state.pose.x > 0.0, float(agent.params.desired_velocity), float(agent.params.agent_radius), float(agent.params.max_velocity))
+    executor.remove_node(mgr)
+    mgr.destroy_node()
+    return attribution, releases
+
+
+def test_agent_meta_pairs_released_agents_with_source_and_release_index(manager_factory: Callable[..., AgentManager]) -> None:
+    attribution, releases = _published_releases(manager_factory(_crossing("sfm"), node_name="attr_robot"), "internal")
+    scripted = {aid: pair for aid, pair in attribution.items() if pair[0] == ""}
+    assert scripted == {-1: ("", 0), 1: ("", 0)}
+    for source, east in (("source_0", False), ("source_1", True)):
+        spawns = {seq: spawn for (name, seq), spawn in releases.items() if name == source}
+        assert len(spawns) >= 3
+        assert sorted(spawns) == list(range(len(spawns)))
+        assert {spawn[1] for spawn in spawns.values()} == {east}
+
+
+def test_far_robot_keeps_every_source_release_pair(manager_factory: Callable[..., AgentManager]) -> None:
+    _, alone = _published_releases(manager_factory(_crossing("sfm"), node_name="attr_alone"), "none")
+    _, with_robot = _published_releases(manager_factory(_crossing("sfm"), node_name="attr_far_robot"), "internal")
+    assert len(alone) > 10
+    assert with_robot == alone
+
+
+def test_capped_source_keeps_the_other_source_pairs_under_new_ids(manager_factory: Callable[..., AgentManager]) -> None:
+    east: dict[int, Releases] = {}
+    ids: dict[int, list[int]] = {}
+    for west_cap in (3, 1):
+        attribution, releases = _published_releases(manager_factory(_crossing("sfm", west_cap), node_name=f"attr_cap_{west_cap}"), "none")
+        east[west_cap] = {pair: spawn for pair, spawn in releases.items() if pair[0] == "source_1"}
+        ids[west_cap] = sorted(aid for aid, pair in attribution.items() if pair[0] == "source_1")
+    assert len(east[3]) > 10
+    assert east[1] == east[3]
+    assert ids[1] != ids[3]

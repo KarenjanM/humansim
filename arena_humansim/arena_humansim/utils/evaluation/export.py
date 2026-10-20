@@ -244,6 +244,8 @@ _FIELD_DOCS: dict[str, tuple[str, str]] = {
     "vx": ("m/s", "world-frame x velocity"),
     "vy": ("m/s", "world-frame y velocity"),
     "radius": ("m", "agent collision radius"),
+    "source_name": ("-", "flow source that released the agent, empty for scripted agents, robots and recordings without attribution"),
+    "source_seq": ("-", "release index of the agent within source_name, 0 when source_name is empty. (source_name, source_seq) pairs a released agent across runs and seeds"),
     "scenario": ("-", "canonical scenario id (Hive partition column)"),
     "planner": ("-", "pedestrian motion model (Hive partition column)"),
     "robot_policy": ("-", "robot policy name; empty string in divergence-mode trials"),

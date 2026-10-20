@@ -2403,23 +2403,28 @@ class AgentManager(Node):
         for name, aid in self._agent_name_to_id.items():
             names.setdefault(aid, name)
         agents = [self._agents.get(aid) for aid in ids]
+        lifetimes = [self._despawn_monitor.lifetime(aid) for aid in ids]
         content = (
             tuple(self._policy_names),
             tuple(ids),
             tuple(names.get(aid, "") for aid in ids),
             tuple(agent.params.handedness if agent is not None else "" for agent in agents),
             tuple(agent.params.name if agent is not None else "" for agent in agents),
+            tuple(lifetime.source_name if lifetime is not None else "" for lifetime in lifetimes),
+            tuple(lifetime.source_seq if lifetime is not None else 0 for lifetime in lifetimes),
         )
         if content == self._meta_published:
             return
         self._meta_published = content
-        policies, _, agent_names, handedness, agent_types = content
+        policies, _, agent_names, handedness, agent_types, source_names, source_seqs = content
         msg = AgentMetaMsg(header=header)
         msg.policies = list(policies)
         msg.agent_id = array.array("i", ids)
         msg.name = list(agent_names)
         msg.handedness = list(handedness)
         msg.agent_type = list(agent_types)
+        msg.source_name = list(source_names)
+        msg.source_seq = array.array("i", source_seqs)
         self._agent_meta_pub.publish(msg)
 
     def _publish_agent_gestures(self, header: Header) -> None:

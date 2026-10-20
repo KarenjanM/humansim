@@ -52,6 +52,10 @@ class DespawnMonitor(Loggable):
     def unregister(self, agent_id: int) -> None:
         self._lifetimes.pop(agent_id, None)
 
+    def lifetime(self, agent_id: int) -> AgentLifetime | None:
+        """Lifetime of a source-released agent, None for any other agent."""
+        return self._lifetimes.get(agent_id)
+
     def clear(self) -> None:
         self._lifetimes.clear()
         self._sink_occupancy.clear()

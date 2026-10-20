@@ -5,3 +5,5 @@ int32[] agent_id
 string[] name                # empty = unnamed
 string[] handedness          # l | r, empty = right
 string[] agent_type          # agent type name, empty = adult
+string[] source_name         # releasing flow source, empty = spawned directly
+int32[] source_seq           # release index within source_name

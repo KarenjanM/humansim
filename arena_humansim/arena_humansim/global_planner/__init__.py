@@ -204,6 +204,10 @@ class GlobalPlanner(PoolAware, WallAware, Loggable, ABC):
         """Point closest to an unreachable target that start can still reach, None to walk straight at the target."""
         return None
 
+    def components(self, poses: Sequence[Pose2D]) -> list[frozenset[int]]:
+        """Free-space components each pose can walk into, empty where the planner cannot tell."""
+        return [frozenset() for _ in poses]
+
     def publish_markers(self, pub: MarkerPublisher) -> None:
         pass
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import os
+from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
@@ -164,6 +165,14 @@ class AStarPlanner(GlobalPlanner):
         if cell is None:
             return None
         return nearest_reachable_cell(self._free_labels, self._origin, self._resolution, cell, target)
+
+    def components(self, poses: Sequence[Pose2D]) -> list[frozenset[int]]:
+        if self._occupancy_grid is None or self._resolution > REACHABLE_MAX_RESOLUTION:
+            return super().components(poses)
+        if self._free_labels is None:
+            self._free_labels = label_free_cells(self._occupancy_grid)
+        cells = [_nearest_free_cell(self._occupancy_grid, *world_to_grid(self._origin, self._resolution, p.x, p.y)) for p in poses]
+        return [frozenset() if cell is None else frozenset({int(self._free_labels[cell])}) for cell in cells]
 
     def _has_map(self) -> bool:
         return self._occupancy_grid is not None and self._weights is not None

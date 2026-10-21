@@ -119,6 +119,11 @@ class NavMeshPlanner(GlobalPlanner):
             return None
         return Pose2D(x=float(q[0]), y=float(q[1]), theta=target.theta)
 
+    def components(self, poses: Sequence[Pose2D]) -> list[frozenset[int]]:
+        if self._router is None or not poses:
+            return super().components(poses)
+        return self._router.components(self._inside(np.array([(p.x, p.y) for p in poses], dtype=np.float64)))
+
     def _inside(self, p: np.ndarray) -> np.ndarray:
         """p moved onto the meshed frame when it lies beyond it."""
         assert self._mesh is not None

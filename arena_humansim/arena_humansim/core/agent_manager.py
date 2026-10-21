@@ -45,9 +45,12 @@ from arena_humansim_msgs.srv import (
     RemoveWalls,
     RemoveWorldObjects,
     ResetSimulation,
+    SetElevatorDoors,
+    SetElevators,
     SetFlow,
     SetWaypoints,
     SpawnAgents,
+    TeleportAgents,
     UpdateRobot,
 )
 from geometry_msgs.msg import Point32, Vector3
@@ -81,6 +84,7 @@ from arena_humansim.core.agents.types import ATTENTION_KEYWORDS, ParamDist
 from arena_humansim.core.animation_kinds import locomotion_states
 from arena_humansim.core.behavior.compiler import BehaviorTreeFactory
 from arena_humansim.core.despawn_monitor import DespawnMonitor
+from arena_humansim.core.elevators import Cabin, Elevators
 from arena_humansim.core.formation.clearance import Clearance
 from arena_humansim.core.interaction_kinds import InteractionType, MembershipRole
 from arena_humansim.core.interaction_manager import CONTACT_ENABLED, DEFAULT_STANDING_DISTANCE, GESTURE_ENABLED, InteractionEdge, InteractionManager, InteractionRow, check_gesture_mode
@@ -145,6 +149,7 @@ _TUNABLE_PARAMS = frozenset(
         "arrival_r_enter",
         "arrival_r_exit",
         "arrival_tau_brake",
+        "elevator_ride_timeout",
         "profile_phases",
         "profile_interval",
     }
@@ -338,6 +343,7 @@ class AgentManager(Node):
         self.declare_parameter("arrival_r_enter", 0.15)
         self.declare_parameter("arrival_r_exit", 0.30)
         self.declare_parameter("arrival_tau_brake", 0.15)
+        self.declare_parameter("elevator_ride_timeout", 30.0)
         self.declare_parameter("publish_markers", 0, ParameterDescriptor(integer_range=[IntegerRange(from_value=0, to_value=2)]))
         self.declare_parameter("profile_phases", False)
         self.declare_parameter("profile_interval", 0)
@@ -504,6 +510,7 @@ class AgentManager(Node):
         self._external_velocity_ticks = max(1, int(round(_EXTERNAL_VELOCITY_WINDOW_S / self._dt)))
         self._walls: dict[str, tuple[tuple[float, float], tuple[float, float]]] = {}
         self._obstacles: dict[str, ObstacleData] = {}
+        self._elevators = Elevators()
         self._prone: set[int] = set()
         self._parked_from: dict[int, tuple[float, float, float]] = {}
         self._marker_pub = MarkerPublisher(self) if self._publish_markers > 0 else None
@@ -639,6 +646,21 @@ class AgentManager(Node):
             "remove_world_objects",
             self._remove_world_objects_callback,
         )
+        self._set_elevators_srv = self.create_service(
+            SetElevators,
+            "set_elevators",
+            self._set_elevators_callback,
+        )
+        self._set_elevator_doors_srv = self.create_service(
+            SetElevatorDoors,
+            "set_elevator_doors",
+            self._set_elevator_doors_callback,
+        )
+        self._teleport_agents_srv = self.create_service(
+            TeleportAgents,
+            "teleport_agents",
+            self._teleport_agents_callback,
+        )
         self._reset_srv = self.create_service(
             ResetSimulation,
             "reset",
@@ -769,6 +791,7 @@ class AgentManager(Node):
         if self._arrival_tau_brake < self._dt:
             self._logger.warning(f"arrival_tau_brake ({self._arrival_tau_brake}) < dt ({self._dt}), clamping to dt")
             self._arrival_tau_brake = float(self._dt)
+        self._elevator_ride_ticks = max(1, int(round(self._float_param("elevator_ride_timeout") / self._dt)))
         self._profile_phases = self.get_parameter("profile_phases").value
         self._profile_interval = self._int_param("profile_interval")
 
@@ -1349,6 +1372,7 @@ class AgentManager(Node):
                 self._pool_agent_ids[idx] = swapped_id
             self._pool_agent_ids.pop()
         self._high_level_cmds.pop(aid, None)
+        self._elevators.forget(aid)
         self._behavior_trees.pop(aid, None)
         self._pinned.pop(aid, None)
         self._robot_service_advertiser.unregister(aid)
@@ -1529,8 +1553,9 @@ class AgentManager(Node):
                 if planner is None or planner.needs_global_subgoal:
                     needs_subgoal_ids.add(int(pool.agent_ids[i]))
             subgoal_agents = [a for a in agents if a.state.agent_id in needs_subgoal_ids]
+            steered = self._elevators.steer(subgoal_agents, self._high_level_cmds)
             for planner, group in _group_by(subgoal_agents, key=lambda a: a.global_planner):
-                planner.compute(group, self._high_level_cmds)
+                planner.compute(group, steered)
 
             self._cached_intermediate_goals = {}
             for planner, _group in _group_by(subgoal_agents, key=lambda a: a.global_planner):
@@ -1627,6 +1652,7 @@ class AgentManager(Node):
                 desired_velocity=agent.state.desired_velocity,
             )
         self._apply_desired_speeds(agents, pool)
+        self._elevators.hold(pool, self._tick_count, self._elevator_ride_ticks)
         heading_goals = {aid: pose.theta for aid, pose in formation_targets.items()}
         for aid, agent in self._agents.items():
             if aid in heading_goals:
@@ -2729,6 +2755,7 @@ class AgentManager(Node):
             self._force_agent_meta()
             self._mark_roster_dirty()
             self._high_level_cmds.clear()
+            self._elevators.clear_rides()
             self._behavior_trees.clear()
             self._agent_name_to_id.clear()
             self._external_entities.clear()
@@ -2794,6 +2821,7 @@ class AgentManager(Node):
         self._interaction_scripts_by_tick.clear()
         self._walls.clear()
         self._obstacles.clear()
+        self._elevators.set_cabins([], [])
         for subsystem in self._wall_aware:
             subsystem.set_walls([])
         self._world_knowledge.clear()
@@ -3104,6 +3132,61 @@ class AgentManager(Node):
         self._refresh_planners()
         self._publish_world_geometry()
         response.success = True
+        self._logger.debug(response.message)
+        return response
+
+    def _set_elevators_callback(self, request: SetElevators.Request, response: SetElevators.Response) -> SetElevators.Response:
+        names = [e.name for e in request.elevators]
+        duplicates = sorted({n for n in names if names.count(n) > 1})
+        missing = sorted({e.destination for e in request.elevators if e.destination and e.destination not in names})
+        if duplicates or missing:
+            response.success = False
+            response.message = f"Rejected elevators: duplicate name(s) {duplicates}, unknown destination(s) {missing}"
+            self._logger.error(response.message)
+            return response
+        cabins = [
+            Cabin(
+                name=e.name,
+                destination=e.destination,
+                boarding=Pose2D(x=e.boarding.x, y=e.boarding.y, theta=e.boarding.theta),
+                doorway=Pose2D(x=e.doorway.x, y=e.doorway.y, theta=e.doorway.theta),
+                queue=Pose2D(x=e.queue.x, y=e.queue.y, theta=e.queue.theta),
+                footprint=tuple((float(p.x), float(p.y)) for p in e.footprint),
+            )
+            for e in request.elevators
+        ]
+        self._elevators.set_cabins(cabins, [e.door_open for e in request.elevators])
+        response.success = True
+        response.message = f"Set {len(cabins)} elevator cabin(s)"
+        self._logger.debug(response.message)
+        return response
+
+    def _set_elevator_doors_callback(self, request: SetElevatorDoors.Request, response: SetElevatorDoors.Response) -> SetElevatorDoors.Response:
+        unknown = sorted({n for n in request.name if n not in self._elevators.cabins})
+        if len(request.name) != len(request.open) or unknown:
+            response.success = False
+            response.message = f"Rejected doors: {len(request.name)} name(s) for {len(request.open)} state(s), unknown cabin(s) {unknown}"
+            self._logger.error(response.message)
+            return response
+        self._elevators.open.update(zip(request.name, (bool(o) for o in request.open), strict=True))
+        response.success = True
+        response.message = f"Set {len(request.name)} elevator door(s)"
+        self._logger.debug(response.message)
+        return response
+
+    def _teleport_agents_callback(self, request: TeleportAgents.Request, response: TeleportAgents.Response) -> TeleportAgents.Response:
+        ids = [int(aid) for aid in request.agent_id]
+        unknown = sorted({aid for aid in ids if aid not in self._pool._id_to_idx})
+        if len(ids) != len(request.pose) or unknown:
+            response.success = False
+            response.message = f"Rejected teleport: {len(ids)} id(s) for {len(request.pose)} pose(s), unknown agent id(s) {unknown}"
+            self._logger.error(response.message)
+            return response
+        for aid, pose in zip(ids, request.pose, strict=True):
+            self._teleport_agent(aid, pose.x, pose.y, pose.theta, float(self._pool.agent_radius[self._pool.idx(aid)]))
+            self._elevators.forget(aid)
+        response.success = True
+        response.message = f"Teleported {len(ids)} agent(s)"
         self._logger.debug(response.message)
         return response
 

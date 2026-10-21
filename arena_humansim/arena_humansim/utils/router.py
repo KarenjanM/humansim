@@ -393,6 +393,17 @@ class Router:
                 best, best_d = q, float(np.hypot(*(q - g)))
         return best
 
+    def components(self, pts: np.ndarray) -> list[frozenset[int]]:
+        """Edge graph components each point enters after a snap, empty when it is walled in or off the mesh."""
+        pts = np.atleast_2d(np.asarray(pts, dtype=np.float64)).copy()
+        for i in np.nonzero(self.clearance(pts) < self.r)[0]:
+            q = self.snap(pts[i])
+            if q is not None:
+                pts[i] = q
+        _, _, nodes, cost = self._terminals(pts)
+        comp = self._comp[nodes]
+        return [frozenset(comp[i][np.isfinite(cost[i])].tolist()) for i in range(len(pts))]
+
     def line_of_sight(self, A: np.ndarray, B: np.ndarray) -> np.ndarray:
         """Per segment A->B: clear of walls by the comfort radius."""
         n = len(A)

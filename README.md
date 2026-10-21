@@ -112,6 +112,14 @@ Every interaction follows a single flow: a BT `SeekNode` emits a SEEK command, I
 - Agents are routed from source to sink via weighted `sink_affinity`
 - TTL-based removal as fallback
 
+## Elevators
+
+`set_elevators` loads elevator cabins in the engine frame: a name, the cabin a ride arrives in, a doorway pose at the outer edge of the door, a queue pose clear of the door threshold where riders wait, a boarding pose inside whose heading riders hold, the footprint polygon and the door state. The engine never moves a cabin. The caller runs the ride, closes and opens doors through `set_elevator_doors` and moves the riders with `teleport_agents`. Cabins survive `reset` with `soft: true` and are dropped by a plain `reset` and by an empty `set_elevators`.
+
+A pedestrian whose navigation target lies in another free-space component of its global planner than itself is routed over the cabins: a cabin is boarded from the components of its doorway and boarding pose and lands in those of its destination cabin, and the route with the fewest rides wins, ties going to the cabin first by name. Only the first cabin of the route is kept, and the pedestrian plans to its queue pose instead of its target. Robots and pedestrians whose target lies in their own component plan as before. `navmesh` labels components on its edge graph, `astar` and `dijkstra` by a flood fill at `global_planner.resolution` 0.1 or finer, and coarser grids route no one over cabins.
+
+A rider walks to the queue pose and within 1 m of it waits, desired speed 0, while the door is closed or the cabin has no free spot. The spots are a 0.7 m grid inside the footprint, 0.35 m clear of its edges, or the boarding pose when none fits. Once the door opens and a spot is free the rider takes the free spot farthest from the doorway, walks to it and stands still, velocity 0, from the moment it is within 0.3 m of it. A door that closes before the rider is inside the footprint sends it back to waiting, and a holding rider pushed out of the footprint while the door is open boards again. `teleport_agents` ends the ride, and on the next BT tick the pedestrian plans from its new pose to its current target, over further cabins when needed. A rider still waiting, boarding or holding `elevator_ride_timeout` seconds after it reached the queue pose or took its spot is released, that cabin is skipped for the same target, and it is routed again or plans as before.
+
 ## Determinism & Replay
 
 The simulator is fully deterministic given a seed. Seeded RNG substreams are maintained per agent and per component, and each substream's seed is derived by hashing `(seed, name)`, never by drawing from a parent stream, so a substream does not depend on which other substreams were requested before it. An agent's substreams (parameters, behavior, random waypoints, interaction order) are keyed on its id, or on `(source, release index)` for a source-released agent, and no stream is shared between agents. Sources sample each released agent (pose, speed and sink) from a `(seed, source, release index)` stream, so two runs with the same seed agree on every agent they both release. How many they release can differ for a `poisson` source under its cap, never for a `max` source. Humans take ids counting up from 1, robots ids counting down from -1, and 0 names no agent, so a robot shifts no pedestrian id, but once a cap drops a release in one run and not in another, the later agents of every source are numbered differently. `agent_meta` names the source (`source_name`) and release index (`source_seq`) of every source-released agent, empty and 0 for any other, so scorers pair a released pedestrian across runs and seeds by `(source_name, source_seq)`, the key of its draws, never by agent id. Exported `agent_states` tables carry both columns. Neighbor lists and contact pairs are ordered by agent id, so a robot changes only the pedestrians it reaches, directly or through other pedestrians.
@@ -185,6 +193,7 @@ Config format and stage semantics: [`config/benchmark/README.md`](arena_humansim
 | `min_speed_for_heading` | `0.1` | Speed (m/s) below which an agent keeps its heading |
 | `arrival_r_enter`, `arrival_r_exit` | `0.15`, `0.30` | Radii (m) at which an agent latches onto its goal and releases it |
 | `arrival_tau_brake` | `0.15` | Braking time constant (s) of a latched agent, at least `dt` |
+| `elevator_ride_timeout` | `30.0` | Sim time (s) after reaching a cabin's queue pose or taking a spot before an unridden rider is released and routed again |
 | `profile_phases`, `profile_interval` | `false`, `0` | Time the tick phases, log the profile every N ticks |
 | `publish_markers` | `0` | RViz markers: 0=off, 1=infrastructure+labels+interactions, 2=full |
 | `log_dir` | `""` | Directory for replay logs |
@@ -200,7 +209,7 @@ A `set_parameters` call on a running node is validated and stored at once and ta
 | `global_planner.inflation_radius`, `global_planner.resolution`, `global_planner.comfort_radius` | The planner rebuilds its grid or mesh from the current walls and drops cached paths |
 | `global_planner`, `local_planner` | The module is created on first use and gets the current walls and pool. An unknown module name is rejected at the set |
 | `local_planner.<key>` | Mean of a local planner param (`relaxation_time`, `repulsion_strength`, ...). It replaces the mean of the agent type and keeps its spread. `0` leaves the agent type's own value. Declared for the keys of the startup planner and of every planner selected through `local_planner` |
-| `waypoint_threshold`, `min_speed_for_heading`, `arrival_r_enter`, `arrival_r_exit`, `arrival_tau_brake`, `force_local_planner`, `profile_phases`, `profile_interval` | The node re-reads them. `arrival_r_enter` must stay below `arrival_r_exit` |
+| `waypoint_threshold`, `min_speed_for_heading`, `arrival_r_enter`, `arrival_r_exit`, `arrival_tau_brake`, `elevator_ride_timeout`, `force_local_planner`, `profile_phases`, `profile_interval` | The node re-reads them. `arrival_r_enter` must stay below `arrival_r_exit` |
 | `publish_markers` | The marker level changes. `0` deletes the published markers |
 | `rtf` | Master mode only, retimes the tick timer |
 
@@ -224,6 +233,9 @@ Re-seating moves every live agent that follows the defaults onto the current loc
 - `spawn_agents`, `remove_agents` — direct agent control
 - `add_source`, `remove_source`, `add_sink`, `remove_sink` — flow control
 - `add_walls`, `remove_walls` — dynamic obstacles
+- `set_elevators` - replace the elevator cabins, an empty list removes them all. Duplicate names or a destination naming no cabin reject the call
+- `set_elevator_doors` - open or close cabin doors by name, an unknown name rejects the call
+- `teleport_agents` - move agents to new poses with zero velocity, ending the ride of a rider. An unknown id rejects the call and moves no one
 - `set_flow` — bulk configure sources, sinks, walls
 - `notify_stimulus` - drive a need on one agent (or `-1` for all) after its reaction time
 - `reset` - clear all simulation state, or with `soft: true` keep it and only apply stored params, re-seat agents, and prune unused planners

@@ -49,22 +49,31 @@ def policy_names(meta_t: np.ndarray, meta_policies: list[list[str]], frame_t: np
 
 
 def source_attribution(meta_t: np.ndarray, meta_sources: list[AgentSources], frame_t: np.ndarray, counts: np.ndarray, agent_id: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Source name and release index per agent row from the latest agent_meta at or before its frame, empty and 0 when unknown."""
+    """Source name and release index per agent row from the latest agent_meta at or before its frame, else from the first later one naming the agent, empty and 0 when unknown."""
     aid = np.asarray(agent_id, dtype=np.int64)
     if not meta_sources:
         return np.full(len(aid), "", dtype=object), np.zeros(len(aid), dtype=np.int64)
     order = np.argsort(meta_t, kind="stable")
     ordered = [meta_sources[i] for i in order]
+    sorted_t = np.asarray(meta_t, dtype=np.int64)[order]
+    sizes = [len(s.agent_id) for s in ordered]
     table = pd.DataFrame(
         {
-            "k": np.repeat(np.arange(len(ordered)), [len(s.agent_id) for s in ordered]),
+            "k": np.repeat(np.arange(len(ordered)), sizes),
+            "t": np.repeat(sorted_t, sizes),
             "agent_id": np.array([*itertools.chain.from_iterable(s.agent_id for s in ordered)], dtype=np.int64),
             "source_name": np.array([*itertools.chain.from_iterable(s.source_name for s in ordered)], dtype=object),
             "source_seq": np.array([*itertools.chain.from_iterable(s.source_seq for s in ordered)], dtype=np.int64),
         }
     ).drop_duplicates(["k", "agent_id"])
-    k = np.repeat(np.searchsorted(np.asarray(meta_t)[order], frame_t, side="right") - 1, counts)
-    rows = pd.DataFrame({"k": k, "agent_id": aid}).merge(table, on=["k", "agent_id"], how="left")
+    row_t = np.repeat(np.asarray(frame_t, dtype=np.int64), counts)
+    k = np.searchsorted(sorted_t, row_t, side="right") - 1
+    rows = pd.DataFrame({"k": k, "agent_id": aid}).merge(table.drop(columns="t"), on=["k", "agent_id"], how="left")
+    unnamed = np.flatnonzero(rows["source_name"].isna().to_numpy())
+    if len(unnamed):
+        probe = pd.DataFrame({"t": row_t[unnamed], "agent_id": aid[unnamed], "row": unnamed}).sort_values("t", kind="stable")
+        later = pd.merge_asof(probe, table.drop(columns="k").sort_values("t", kind="stable"), on="t", by="agent_id", direction="forward").dropna(subset=["source_name"])
+        rows.loc[later["row"].to_numpy(), ["source_name", "source_seq"]] = later[["source_name", "source_seq"]].to_numpy()
     return rows["source_name"].fillna("").to_numpy(dtype=object), rows["source_seq"].fillna(0).to_numpy(dtype=np.int64)
 
 

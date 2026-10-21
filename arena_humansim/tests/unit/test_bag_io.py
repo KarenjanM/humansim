@@ -15,7 +15,7 @@ from rclpy.serialization import serialize_message
 from rosbags.rosbag2 import StoragePlugin, Writer
 from rosbags.typesys import Stores, get_types_from_msg, get_typestore
 
-from tests.unit._bags import FLAT, LAYOUTS, NESTED, Agent, Frames, frame_msg, write_bag
+from tests.unit._bags import FLAT, LAYOUTS, NESTED, Agent, Frames, frame_msg, meta_msg, write_bag
 
 _TRAJECTORY: Frames = [
     (0, [Agent(1, 0.0, 1.0, vx=0.1), Agent(-1, 3.0, 0.0, policy="", kind=1, radius=0.5)]),
@@ -147,7 +147,7 @@ def test_bag_recorded_before_source_attribution_reads_empty_sources(tmp_path: Pa
     assert df["source_seq"].tolist() == [0, 0]
 
 
-def test_source_attribution_uses_the_latest_meta_at_or_before_each_frame() -> None:
+def test_source_attribution_uses_the_latest_meta_at_or_before_each_frame_else_the_next_naming_the_agent() -> None:
     names, seqs = source_attribution(
         meta_t=np.array([20, 10]),
         meta_sources=[AgentSources([1, 2], ["source_1", "source_0"], [4, 2]), AgentSources([1], ["source_0"], [0])],
@@ -156,5 +156,49 @@ def test_source_attribution_uses_the_latest_meta_at_or_before_each_frame() -> No
         agent_id=np.array([1, 1, 2, 2, 1]),
     )
 
-    assert names.tolist() == ["", "source_0", "", "source_0", "source_1"]
-    assert seqs.tolist() == [0, 0, 0, 2, 4]
+    assert names.tolist() == ["source_0", "source_0", "source_0", "source_0", "source_1"]
+    assert seqs.tolist() == [0, 0, 2, 2, 4]
+
+
+def test_source_attribution_never_names_a_reused_id_after_its_previous_pedestrian() -> None:
+    names, seqs = source_attribution(
+        meta_t=np.array([0, 10, 30]),
+        meta_sources=[AgentSources([5], ["west"], [1]), AgentSources([], [], []), AgentSources([5], ["east"], [0])],
+        frame_t=np.array([0, 20, 30]),
+        counts=np.array([1, 1, 1]),
+        agent_id=np.array([5, 5, 5]),
+    )
+
+    assert names.tolist() == ["west", "east", "east"]
+    assert seqs.tolist() == [1, 0, 0]
+
+
+def test_source_attribution_leaves_agents_no_meta_names_empty() -> None:
+    names, seqs = source_attribution(
+        meta_t=np.array([0]),
+        meta_sources=[AgentSources([1], ["west"], [2])],
+        frame_t=np.array([0]),
+        counts=np.array([2]),
+        agent_id=np.array([1, 9]),
+    )
+
+    assert names.tolist() == ["west", ""]
+    assert seqs.tolist() == [2, 0]
+
+
+def test_spawn_frames_recorded_before_their_meta_take_its_source(tmp_path: Path) -> None:
+    share = Path(get_package_share_directory("arena_humansim_msgs")) / "msg"
+    store = get_typestore(Stores.ROS2_JAZZY)
+    store.register({**get_types_from_msg((share / "AgentMeta.msg").read_text(), AGENT_META_TYPE), **get_types_from_msg((share / "AgentFrame.msg").read_text(), AGENT_FRAME_TYPE)})
+    spawned = [Agent(7, 0.0, 1.0, source_name="west", source_seq=2)]
+    with Writer(tmp_path / "bag", version=8, storage_plugin=StoragePlugin.MCAP) as writer:
+        frame_connection = writer.add_connection("/agent_states", AGENT_FRAME_TYPE, typestore=store)
+        meta_connection = writer.add_connection("/agent_meta", AGENT_META_TYPE, typestore=store)
+        writer.write(frame_connection, 0, serialize_message(frame_msg(0, spawned, ["sfm"])))
+        writer.write(meta_connection, 10, serialize_message(meta_msg(10, spawned, ["sfm"])))
+        writer.write(frame_connection, 20, serialize_message(frame_msg(20, spawned, ["sfm"])))
+
+    df = extract_agent_states(tmp_path / "bag")
+
+    assert df["source_name"].tolist() == ["west", "west"]
+    assert df["source_seq"].tolist() == [2, 2]

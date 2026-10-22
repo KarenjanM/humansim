@@ -223,3 +223,20 @@ def test_reset_clears_pending_stimuli(manager_factory: Callable[..., AgentManage
     assert mgr._pending_stimuli
     mgr._reset_callback(ResetSimulation.Request(), ResetSimulation.Response())
     assert not mgr._pending_stimuli
+
+
+def test_removing_every_agent_drops_stimuli_queued_for_them(manager_factory: Callable[..., AgentManager]) -> None:
+    from arena_humansim_msgs.srv import RemoveAgents
+
+    mgr = manager_factory(_scenario(), node_name="test_notify_remove_all")
+    (old,) = _spawn(mgr, 1)
+    assert _notify(mgr, old).success
+    due = _due_ticks(mgr, old)
+    mgr._remove_agents_callback(RemoveAgents.Request(), RemoveAgents.Response())
+    assert not mgr._pending_stimuli
+    (new,) = _spawn(mgr, 1)
+    assert new == old
+    mgr._agents[new].needs = _alarm_needs()
+    for _ in range(due + 1):
+        mgr.tick()
+    assert mgr._agents[new].needs.needs["alarm"].value == 0.0

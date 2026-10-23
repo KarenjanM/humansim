@@ -53,6 +53,14 @@ class Formation(Loggable, ABC):
         """Explicit slots already assigned to a member, so a sibling formation on the same object can skip them."""
         return []
 
+    def seat_index_of(self, agent_id: int) -> int | None:
+        """Object seat index of the member's explicit slot, None without one."""
+        return None
+
+    def held_seats(self) -> list[int]:
+        """Object seat indices of the explicit slots assigned to members."""
+        return []
+
     def speeds(self) -> dict[int, float]:
         """Desired speed per member for this tick, empty where members keep their own pace."""
         return {}

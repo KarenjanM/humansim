@@ -216,11 +216,14 @@ def _interaction_frame(header: Header, table: tuple[InteractionRow, ...], edges:
     offsets = [0]
     members: list[int] = []
     roles: list[int] = []
+    seats: list[int] = []
     for row in table:
         members.extend(row.participants)
         members.extend(row.queue)
         roles.extend([MembershipRole.PARTICIPANT] * len(row.participants))
         roles.extend([MembershipRole.QUEUED] * len(row.queue))
+        seats.extend(row.seats)
+        seats.extend([-1] * len(row.queue))
         offsets.append(len(members))
     msg.interaction_id = array.array("i", [row.interaction_id for row in table])
     msg.interaction_type = array.array("B", [row.interaction_type for row in table])
@@ -232,6 +235,7 @@ def _interaction_frame(header: Header, table: tuple[InteractionRow, ...], edges:
     msg.member_offset = array.array("I", offsets)
     msg.member_id = array.array("i", members)
     msg.member_role = array.array("B", roles)
+    msg.member_seat = array.array("i", seats)
     for edge in edges:
         event = InteractionEventMsg()
         event.interaction_id = int(edge.interaction_id)
@@ -240,6 +244,16 @@ def _interaction_frame(header: Header, table: tuple[InteractionRow, ...], edges:
         event.participants = [int(p) for p in edge.participants]
         msg.events.append(event)  # pyright: ignore[reportAttributeAccessIssue]
     return msg
+
+
+def _seat_conflicts(info: WorldObjectInfoMsg) -> list[frozenset[int]]:
+    """Per-seat conflict sets of a world object, empty when it sends none."""
+    offsets, conflicts = list(info.seat_conflict_offset), list(info.seat_conflicts)
+    if not offsets:
+        return []
+    if len(offsets) != len(info.seats) + 1 or offsets[-1] != len(conflicts):
+        raise ValueError(f"world object {info.object_id!r}: seat_conflict_offset needs {len(info.seats) + 1} offsets ending at {len(conflicts)}, got {offsets}")
+    return [frozenset(int(c) for c in conflicts[offsets[i] : offsets[i + 1]]) for i in range(len(info.seats))]
 
 
 def _group_by[T, K: Hashable](agents: Iterable[T], key: Callable[[T], K]) -> Iterable[tuple[K, list[T]]]:
@@ -3272,7 +3286,14 @@ class AgentManager(Node):
 
     def _add_world_objects_callback(self, request: AddWorldObjects.Request, response: AddWorldObjects.Response) -> AddWorldObjects.Response:
         added = 0
+        rejected: list[str] = []
         for info in request.objects:
+            try:
+                seat_conflicts = _seat_conflicts(info)
+            except ValueError as e:
+                self._logger.warning(str(e))
+                rejected.append(info.object_id)
+                continue
             satisfies = {k: float(v) for k, v in zip(info.satisfies_keys, info.satisfies_values, strict=True)}
             interaction_radius = float(info.interaction_radius) if info.interaction_radius > 0.0 else None
             formation: FormationSpec | None = None
@@ -3289,12 +3310,13 @@ class AgentManager(Node):
                     interaction_radius=interaction_radius,
                     formation=formation,
                     seats=[Pose2D(x=float(s.x), y=float(s.y), theta=float(s.theta)) for s in info.seats],
+                    seat_conflicts=seat_conflicts,
                 )
             )
             added += 1
         self._publish_world_geometry()
-        response.success = True
-        response.message = f"Added {added} world object(s), total {len(self._world_knowledge)}"
+        response.success = not rejected
+        response.message = f"Added {added} world object(s), total {len(self._world_knowledge)}" + (f", rejected {', '.join(rejected)}" if rejected else "")
         self._logger.debug(response.message)
         return response
 

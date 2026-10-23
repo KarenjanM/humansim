@@ -123,15 +123,6 @@ class ClusterFormation(Formation):
             return None
         return self.slot_of(agent_id)
 
-    def occupied_slots(self) -> list[Pose2D]:
-        if self._generated:
-            return []
-        return [s.pose for s in self._slots if s.agent_id is not None]
-
-    @property
-    def explicit(self) -> bool:
-        return not self._generated
-
     def seat_index_of(self, agent_id: int) -> int | None:
         slot = next((s for s in self._slots if s.agent_id == agent_id), None)
         return slot.seat if slot is not None and not self._generated else None

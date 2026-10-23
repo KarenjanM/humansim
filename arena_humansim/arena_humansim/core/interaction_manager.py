@@ -677,6 +677,7 @@ class InteractionManager(Loggable):
         return total
 
     def _tick_access(self, dt: float) -> None:
+        self._seat_queued_on_free_seats()
         for interaction in self.interactions.values():
             contract = interaction.contract
             access: AccessPolicy | None = contract.access
@@ -899,10 +900,31 @@ class InteractionManager(Loggable):
         return iid
 
     def _seat_left_for_another(self, interaction: InteractionState) -> bool:
-        """A full seated interaction sends a seeker to a new interaction while its object has a seat that fits."""
+        """A full seated interaction sends a seeker to a new interaction while its object has a seat nobody waits for."""
         if not interaction.state.get(_SEATED) or not interaction.contract.is_full or interaction.object_id is None:
             return False
-        return any(self._seat_fits(interaction.object_id, seat) for seat in range(self._seat_count(interaction.object_id)))
+        seated = self._seated_on(interaction.object_id)
+        if any(other.contract.queue or self._unseated(other) for other in seated):
+            return False
+        return bool(self._fitting_seats(interaction.object_id))
+
+    def _seat_queued_on_free_seats(self) -> None:
+        """Move the head of a full seated interaction's queue into a new interaction while its object has a seat nobody waits for."""
+        for object_id in sorted({i.object_id for i in self.interactions.values() if i.object_id is not None and i.state.get(_SEATED)}):
+            while True:
+                seated = self._seated_on(object_id)
+                if len(self._fitting_seats(object_id)) <= sum(self._unseated(i) for i in seated):
+                    break
+                source = next((i for i in seated if i.contract.queue and len(i.contract.current_participants) >= i.contract.max_participants != -1), None)
+                if source is None:
+                    break
+                agent_id = source.contract.queue.pop(0)
+                duration = source.member_durations.pop(agent_id, None)
+                self._drop_membership(agent_id, source.id)
+                spec = SeekSpec(interaction_type=InteractionType(source.type), target=object_id, duration=duration)
+                interaction = self._create_interaction(creator_id=agent_id, spec=spec)
+                if duration is not None and duration > 0:
+                    interaction.member_durations[agent_id] = duration
 
     def _create_interaction(
         self,
@@ -1002,7 +1024,6 @@ class InteractionManager(Loggable):
             assert obj is not None
             params["slot_poses"] = list(obj.seats)
             params["admissible"] = lambda seat: self._seat_fits(object_id, seat)
-            interaction.state[_SEATED] = True
         try:
             formation = Formation.create(
                 active_spec.type,
@@ -1015,6 +1036,9 @@ class InteractionManager(Loggable):
             self._logger.warning(f"Formation '{active_spec.type}' instantiation failed for interaction {interaction.id}: {e}")
             return None
         interaction.state["_active_formation_spec"] = active_spec
+        if "admissible" in params:
+            interaction.state[_SEATED] = True
+            interaction.contract.seat_gate = lambda: len(self._fitting_seats(object_id)) > self._unseated(interaction)
         return formation
 
     def _seat_count(self, object_id: str) -> int:
@@ -1030,14 +1054,26 @@ class InteractionManager(Loggable):
             held.update(interaction.contract.formation.held_seats())
         return held
 
-    def _seat_fits(self, object_id: str, seat: int) -> bool:
+    def _seat_fits(self, object_id: str, seat: int, held: set[int] | None = None) -> bool:
         """The seat is free and conflicts with no held seat of its object."""
-        held = self.held_seats(object_id)
+        held = self.held_seats(object_id) if held is None else held
         if seat in held:
             return False
         obj = self._world_knowledge.get(object_id) if self._world_knowledge is not None else None
         conflicts = obj.seat_conflicts[seat] if obj is not None and seat < len(obj.seat_conflicts) else frozenset()
         return not (conflicts & held)
+
+    def _fitting_seats(self, object_id: str) -> list[int]:
+        held = self.held_seats(object_id)
+        return [seat for seat in range(self._seat_count(object_id)) if self._seat_fits(object_id, seat, held)]
+
+    @staticmethod
+    def _unseated(interaction: InteractionState) -> int:
+        formation = interaction.contract.formation
+        return len(interaction.participants) - (len(formation.held_seats()) if formation is not None else 0)
+
+    def _seated_on(self, object_id: str) -> list[InteractionState]:
+        return [i for _, i in sorted(self.interactions.items()) if i.object_id == object_id and i.state.get(_SEATED) and i.outcome not in _ENDED_OUTCOMES]
 
     def _object_formation_spec(self, object_id: str | None) -> FormationSpec | None:
         if object_id is None or self._world_knowledge is None:

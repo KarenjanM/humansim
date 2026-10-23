@@ -49,10 +49,6 @@ class Formation(Loggable, ABC):
         """Explicit slot the arrived agent is parked on, None for free-standing formations."""
         return None
 
-    def occupied_slots(self) -> list[Pose2D]:
-        """Explicit slots already assigned to a member, so a sibling formation on the same object can skip them."""
-        return []
-
     def seat_index_of(self, agent_id: int) -> int | None:
         """Object seat index of the member's explicit slot, None without one."""
         return None

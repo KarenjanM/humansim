@@ -3299,14 +3299,12 @@ class AgentManager(Node):
 
     def _add_world_objects_callback(self, request: AddWorldObjects.Request, response: AddWorldObjects.Response) -> AddWorldObjects.Response:
         added = 0
-        rejected: list[str] = []
         for info in request.objects:
             try:
                 seat_conflicts = _seat_conflicts(info)
             except ValueError as e:
-                self._logger.warning(str(e))
-                rejected.append(info.object_id)
-                continue
+                self._logger.warning(f"{e}, keeping its seats without conflicts")
+                seat_conflicts = []
             satisfies = {k: float(v) for k, v in zip(info.satisfies_keys, info.satisfies_values, strict=True)}
             interaction_radius = float(info.interaction_radius) if info.interaction_radius > 0.0 else None
             formation: FormationSpec | None = None
@@ -3328,8 +3326,8 @@ class AgentManager(Node):
             )
             added += 1
         self._publish_world_geometry()
-        response.success = not rejected
-        response.message = f"Added {added} world object(s), total {len(self._world_knowledge)}" + (f", rejected {', '.join(rejected)}" if rejected else "")
+        response.success = True
+        response.message = f"Added {added} world object(s), total {len(self._world_knowledge)}"
         self._logger.debug(response.message)
         return response
 

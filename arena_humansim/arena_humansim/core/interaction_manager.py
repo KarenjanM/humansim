@@ -1017,13 +1017,14 @@ class InteractionManager(Loggable):
             return None
 
         params = self._contact_params(interaction, active_spec.type, dict(active_spec.params or {}))
-        object_id = interaction.object_id
-        if object_id is not None and active_spec.type == "cluster" and self._seat_count(object_id):
+        seat_object: str | None = None
+        if interaction.object_id is not None and active_spec.type == "cluster" and self._seat_count(interaction.object_id):
+            seat_object = interaction.object_id
             assert self._world_knowledge is not None
-            obj = self._world_knowledge.get(object_id)
+            obj = self._world_knowledge.get(seat_object)
             assert obj is not None
             params["slot_poses"] = list(obj.seats)
-            params["admissible"] = lambda seat: self._seat_fits(object_id, seat)
+            params["admissible"] = self._seat_admissible(seat_object)
         try:
             formation = Formation.create(
                 active_spec.type,
@@ -1036,10 +1037,16 @@ class InteractionManager(Loggable):
             self._logger.warning(f"Formation '{active_spec.type}' instantiation failed for interaction {interaction.id}: {e}")
             return None
         interaction.state["_active_formation_spec"] = active_spec
-        if "admissible" in params:
+        if seat_object is not None:
             interaction.state[_SEATED] = True
-            interaction.contract.seat_gate = lambda: len(self._fitting_seats(object_id)) > self._unseated(interaction)
+            interaction.contract.seat_gate = self._seat_gate(seat_object, interaction)
         return formation
+
+    def _seat_admissible(self, object_id: str) -> Callable[[int], bool]:
+        return lambda seat: self._seat_fits(object_id, seat)
+
+    def _seat_gate(self, object_id: str, interaction: InteractionState) -> Callable[[], bool]:
+        return lambda: len(self._fitting_seats(object_id)) > self._unseated(interaction)
 
     def _seat_count(self, object_id: str) -> int:
         obj = self._world_knowledge.get(object_id) if self._world_knowledge is not None else None

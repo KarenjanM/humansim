@@ -316,6 +316,37 @@ def test_seated_agent_parks_on_its_seat_from_reach() -> None:
     assert mgr.parked() == {1: seat}
 
 
+def test_stopping_an_object_releases_its_sitter_and_spares_other_objects() -> None:
+    wk = WorldKnowledge()
+    for object_id, x in (("chair", 5.0), ("stool", -5.0)):
+        wk.add_object(WorldObject(object_id=object_id, type=object_id, pose=Pose2D(x=x), seats=[Pose2D(x=x, theta=-1.5)]))
+    agents = {1: _FakeAgent(state=_FakeState(agent_id=1, pose=Pose2D(x=5.0, y=-0.7))), 2: _FakeAgent(state=_FakeState(agent_id=2, pose=Pose2D(x=-5.0, y=-0.7)))}
+    mgr = _mk_manager(agents, world=wk)
+    chair = _create(mgr, 1, InteractionType.SIT_ON, target="chair")
+    stool = _create(mgr, 2, InteractionType.SIT_ON, target="stool")
+    for iid in (chair, stool):
+        mgr.interactions[iid].outcome = InteractionOutcome.ACTIVE
+    mgr.update({}, dt=0.05)
+    assert set(mgr.parked()) == {1, 2}
+    mgr.stop_object("chair")
+    assert mgr.interactions[chair].outcome == InteractionOutcome.INTERRUPTED
+    assert mgr.interactions[stool].outcome == InteractionOutcome.ACTIVE
+    assert set(mgr.parked()) == {2}
+
+
+def test_stopping_every_object_releases_every_sitter() -> None:
+    wk = WorldKnowledge()
+    wk.add_object(WorldObject(object_id="chair", type="chair", pose=Pose2D(x=5.0), seats=[Pose2D(x=5.0, theta=-1.5)]))
+    agents = {1: _FakeAgent(state=_FakeState(agent_id=1, pose=Pose2D(x=5.0, y=-0.7)))}
+    mgr = _mk_manager(agents, world=wk)
+    iid = _create(mgr, 1, InteractionType.SIT_ON, target="chair")
+    mgr.interactions[iid].outcome = InteractionOutcome.ACTIVE
+    mgr.update({}, dt=0.05)
+    mgr.stop_object()
+    assert mgr.interactions[iid].outcome == InteractionOutcome.INTERRUPTED
+    assert mgr.parked() == {}
+
+
 def test_posture_waits_for_arrival() -> None:
     """A participant is ACTIVE while still walking up, the widened footprint must not apply yet."""
     wk = WorldKnowledge()

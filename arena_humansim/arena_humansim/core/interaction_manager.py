@@ -652,6 +652,14 @@ class InteractionManager(Loggable):
         if had_memberships:
             self._update_bt_movement(agent_id, interaction_id=None, clear_command=True, last_outcome=reason)
 
+    def stop_object(self, object_id: str | None = None) -> None:
+        """Interrupt the live interactions bound to object_id, every object-bound one when None."""
+        for iid, interaction in list(self.interactions.items()):
+            if interaction.object_id is None or interaction.outcome in _ENDED_OUTCOMES:
+                continue
+            if object_id is None or interaction.object_id == object_id:
+                self._teardown(iid, InteractionOutcome.INTERRUPTED, list(interaction.participants))
+
     def queue_length_for_object(self, object_id: str) -> int:
         total = 0
         for interaction in self.interactions.values():

@@ -3302,11 +3302,13 @@ class AgentManager(Node):
         if not request.object_ids:
             removed = len(self._world_knowledge)
             self._world_knowledge.clear()
+            self._interaction_manager.stop_object()
             response.message = f"Removed all {removed} world object(s)"
         else:
             removed = 0
             for object_id in request.object_ids:
                 if self._world_knowledge.remove_object(object_id) is not None:
+                    self._interaction_manager.stop_object(object_id)
                     removed += 1
             response.message = f"Removed {removed} world object(s), remaining {len(self._world_knowledge)}"
         self._publish_world_geometry()

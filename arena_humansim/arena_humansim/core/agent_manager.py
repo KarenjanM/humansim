@@ -27,6 +27,7 @@ from arena_humansim_msgs.msg import ObstacleConfig as ObstacleConfigMsg
 from arena_humansim_msgs.msg import Shape as ShapeMsg
 from arena_humansim_msgs.msg import SinkConfig as SinkConfigMsg
 from arena_humansim_msgs.msg import SourceConfig as SourceConfigMsg
+from arena_humansim_msgs.msg import TeleportZone as TeleportZoneMsg
 from arena_humansim_msgs.msg import WorldGeometry as WorldGeometryMsg
 from arena_humansim_msgs.msg import WorldObjectInfo as WorldObjectInfoMsg
 from arena_humansim_msgs.srv import (
@@ -45,10 +46,10 @@ from arena_humansim_msgs.srv import (
     RemoveWalls,
     RemoveWorldObjects,
     ResetSimulation,
-    SetElevatorDoors,
-    SetElevators,
     SetFlow,
+    SetTeleportZones,
     SetWaypoints,
+    SetZoneAccess,
     SpawnAgents,
     TeleportAgents,
     UpdateRobot,
@@ -84,7 +85,6 @@ from arena_humansim.core.agents.types import ATTENTION_KEYWORDS, ParamDist
 from arena_humansim.core.animation_kinds import locomotion_states
 from arena_humansim.core.behavior.compiler import BehaviorTreeFactory
 from arena_humansim.core.despawn_monitor import DespawnMonitor
-from arena_humansim.core.elevators import Cabin, Elevators
 from arena_humansim.core.formation.clearance import Clearance
 from arena_humansim.core.interaction_kinds import InteractionType, MembershipRole
 from arena_humansim.core.interaction_manager import CONTACT_ENABLED, DEFAULT_STANDING_DISTANCE, GESTURE_ENABLED, InteractionEdge, InteractionManager, InteractionRow, check_gesture_mode
@@ -95,6 +95,7 @@ from arena_humansim.core.recorder import BagRecorder, default_record_dir
 from arena_humansim.core.replay import ReplayManager, ReplayResult
 from arena_humansim.core.robot_services import RobotServiceAdvertiser
 from arena_humansim.core.spawn_scheduler import SpawnScheduler
+from arena_humansim.core.teleport_zones import TeleportZones, Zone
 from arena_humansim.core.viz import MarkerPublisher, publish_infrastructure, publish_module_markers
 from arena_humansim.core.world_knowledge import FormationSpec, WorldKnowledge, WorldObject
 from arena_humansim.global_planner import GlobalPlanner
@@ -149,7 +150,7 @@ _TUNABLE_PARAMS = frozenset(
         "arrival_r_enter",
         "arrival_r_exit",
         "arrival_tau_brake",
-        "elevator_ride_timeout",
+        "zone_wait_timeout",
         "profile_phases",
         "profile_interval",
     }
@@ -357,7 +358,7 @@ class AgentManager(Node):
         self.declare_parameter("arrival_r_enter", 0.15)
         self.declare_parameter("arrival_r_exit", 0.30)
         self.declare_parameter("arrival_tau_brake", 0.15)
-        self.declare_parameter("elevator_ride_timeout", 30.0)
+        self.declare_parameter("zone_wait_timeout", 30.0)
         self.declare_parameter("publish_markers", 0, ParameterDescriptor(integer_range=[IntegerRange(from_value=0, to_value=2)]))
         self.declare_parameter("profile_phases", False)
         self.declare_parameter("profile_interval", 0)
@@ -524,7 +525,7 @@ class AgentManager(Node):
         self._external_velocity_ticks = max(1, int(round(_EXTERNAL_VELOCITY_WINDOW_S / self._dt)))
         self._walls: dict[str, tuple[tuple[float, float], tuple[float, float]]] = {}
         self._obstacles: dict[str, ObstacleData] = {}
-        self._elevators = Elevators()
+        self._zones = TeleportZones()
         self._prone: set[int] = set()
         self._parked_from: dict[int, tuple[float, float, float]] = {}
         self._marker_pub = MarkerPublisher(self) if self._publish_markers > 0 else None
@@ -661,15 +662,15 @@ class AgentManager(Node):
             "remove_world_objects",
             self._remove_world_objects_callback,
         )
-        self._set_elevators_srv = self.create_service(
-            SetElevators,
-            "set_elevators",
-            self._set_elevators_callback,
+        self._set_teleport_zones_srv = self.create_service(
+            SetTeleportZones,
+            "set_teleport_zones",
+            self._set_teleport_zones_callback,
         )
-        self._set_elevator_doors_srv = self.create_service(
-            SetElevatorDoors,
-            "set_elevator_doors",
-            self._set_elevator_doors_callback,
+        self._set_zone_access_srv = self.create_service(
+            SetZoneAccess,
+            "set_zone_access",
+            self._set_zone_access_callback,
         )
         self._teleport_agents_srv = self.create_service(
             TeleportAgents,
@@ -806,7 +807,7 @@ class AgentManager(Node):
         if self._arrival_tau_brake < self._dt:
             self._logger.warning(f"arrival_tau_brake ({self._arrival_tau_brake}) < dt ({self._dt}), clamping to dt")
             self._arrival_tau_brake = float(self._dt)
-        self._elevator_ride_ticks = max(1, int(round(self._float_param("elevator_ride_timeout") / self._dt)))
+        self._zone_wait_ticks = max(1, int(round(self._float_param("zone_wait_timeout") / self._dt)))
         self._profile_phases = self.get_parameter("profile_phases").value
         self._profile_interval = self._int_param("profile_interval")
 
@@ -1075,6 +1076,23 @@ class AgentManager(Node):
                 m.interaction_types = list(o.interaction_types)
                 obs_req.obstacles.append(m)  # pyright: ignore[reportAttributeAccessIssue]
             self._add_obstacles_callback(obs_req, AddObstacles.Response())
+
+        if scenario.teleport_zones:
+            zones_req = SetTeleportZones.Request()
+            for z in scenario.teleport_zones:
+                m = TeleportZoneMsg()
+                m.name = z.name
+                m.destinations = list(z.destinations)
+                m.entry = Pose2DMsg(x=z.entry.x, y=z.entry.y, theta=z.entry.theta)
+                m.wait = Pose2DMsg(x=z.wait.x, y=z.wait.y, theta=z.wait.theta)
+                m.hold = Pose2DMsg(x=z.hold.x, y=z.hold.y, theta=z.hold.theta)
+                m.footprint = [Point32(x=float(p.x), y=float(p.y), z=0.0) for p in z.footprint]
+                m.open = bool(z.open)
+                m.delay = float(z.delay)
+                zones_req.zones.append(m)  # pyright: ignore[reportAttributeAccessIssue]
+            resp = self._set_teleport_zones_callback(zones_req, SetTeleportZones.Response())
+            if not resp.success:
+                self._logger.error(f"scenario teleport zones failed: {resp.message}")
 
         self._init_scenario_agents(scenario)
 
@@ -1395,7 +1413,7 @@ class AgentManager(Node):
                 self._pool_agent_ids[idx] = swapped_id
             self._pool_agent_ids.pop()
         self._high_level_cmds.pop(aid, None)
-        self._elevators.forget(aid)
+        self._zones.forget(aid)
         self._behavior_trees.pop(aid, None)
         self._pinned.pop(aid, None)
         self._robot_service_advertiser.unregister(aid)
@@ -1577,7 +1595,7 @@ class AgentManager(Node):
                 if planner is None or planner.needs_global_subgoal:
                     needs_subgoal_ids.add(int(pool.agent_ids[i]))
             subgoal_agents = [a for a in agents if a.state.agent_id in needs_subgoal_ids]
-            steered = self._elevators.steer(subgoal_agents, self._high_level_cmds)
+            steered = self._zones.steer(subgoal_agents, self._high_level_cmds)
             for planner, group in _group_by(subgoal_agents, key=lambda a: a.global_planner):
                 planner.compute(group, steered)
 
@@ -1676,7 +1694,10 @@ class AgentManager(Node):
                 desired_velocity=agent.state.desired_velocity,
             )
         self._apply_desired_speeds(agents, pool)
-        self._elevators.hold(pool, self._tick_count, self._elevator_ride_ticks)
+        for aid, x, y in self._zones.hold(pool, self._tick_count, self._zone_wait_ticks, self._dt):
+            idx = pool.idx(aid)
+            self._teleport_agent(aid, x, y, float(pool.theta[idx]), float(pool.agent_radius[idx]))
+            self._zones.forget(aid)
         heading_goals = {aid: pose.theta for aid, pose in formation_targets.items()}
         for aid, agent in self._agents.items():
             if aid in heading_goals:
@@ -2779,7 +2800,7 @@ class AgentManager(Node):
             self._force_agent_meta()
             self._mark_roster_dirty()
             self._high_level_cmds.clear()
-            self._elevators.clear_rides()
+            self._zones.clear_transfers()
             self._behavior_trees.clear()
             self._agent_name_to_id.clear()
             self._external_entities.clear()
@@ -2847,7 +2868,7 @@ class AgentManager(Node):
         self._interaction_scripts_by_tick.clear()
         self._walls.clear()
         self._obstacles.clear()
-        self._elevators.set_cabins([], [])
+        self._zones.set_zones([], [])
         for subsystem in self._wall_aware:
             subsystem.set_walls([])
         self._world_knowledge.clear()
@@ -3163,42 +3184,43 @@ class AgentManager(Node):
         self._logger.debug(response.message)
         return response
 
-    def _set_elevators_callback(self, request: SetElevators.Request, response: SetElevators.Response) -> SetElevators.Response:
-        names = [e.name for e in request.elevators]
+    def _set_teleport_zones_callback(self, request: SetTeleportZones.Request, response: SetTeleportZones.Response) -> SetTeleportZones.Response:
+        names = [z.name for z in request.zones]
         duplicates = sorted({n for n in names if names.count(n) > 1})
-        missing = sorted({e.destination for e in request.elevators if e.destination and e.destination not in names})
+        missing = sorted({d for z in request.zones for d in z.destinations if d not in names})
         if duplicates or missing:
             response.success = False
-            response.message = f"Rejected elevators: duplicate name(s) {duplicates}, unknown destination(s) {missing}"
+            response.message = f"Rejected teleport zones: duplicate name(s) {duplicates}, unknown destination(s) {missing}"
             self._logger.error(response.message)
             return response
-        cabins = [
-            Cabin(
-                name=e.name,
-                destination=e.destination,
-                boarding=Pose2D(x=e.boarding.x, y=e.boarding.y, theta=e.boarding.theta),
-                doorway=Pose2D(x=e.doorway.x, y=e.doorway.y, theta=e.doorway.theta),
-                queue=Pose2D(x=e.queue.x, y=e.queue.y, theta=e.queue.theta),
-                footprint=tuple((float(p.x), float(p.y)) for p in e.footprint),
+        zones = [
+            Zone(
+                name=z.name,
+                destinations=tuple(z.destinations),
+                entry=Pose2D(x=z.entry.x, y=z.entry.y, theta=z.entry.theta),
+                wait=Pose2D(x=z.wait.x, y=z.wait.y, theta=z.wait.theta),
+                hold=Pose2D(x=z.hold.x, y=z.hold.y, theta=z.hold.theta),
+                footprint=tuple((float(p.x), float(p.y)) for p in z.footprint),
+                delay=float(z.delay),
             )
-            for e in request.elevators
+            for z in request.zones
         ]
-        self._elevators.set_cabins(cabins, [e.door_open for e in request.elevators])
+        self._zones.set_zones(zones, [z.open for z in request.zones])
         response.success = True
-        response.message = f"Set {len(cabins)} elevator cabin(s)"
+        response.message = f"Set {len(zones)} teleport zone(s)"
         self._logger.debug(response.message)
         return response
 
-    def _set_elevator_doors_callback(self, request: SetElevatorDoors.Request, response: SetElevatorDoors.Response) -> SetElevatorDoors.Response:
-        unknown = sorted({n for n in request.name if n not in self._elevators.cabins})
+    def _set_zone_access_callback(self, request: SetZoneAccess.Request, response: SetZoneAccess.Response) -> SetZoneAccess.Response:
+        unknown = sorted({n for n in request.name if n not in self._zones.zones})
         if len(request.name) != len(request.open) or unknown:
             response.success = False
-            response.message = f"Rejected doors: {len(request.name)} name(s) for {len(request.open)} state(s), unknown cabin(s) {unknown}"
+            response.message = f"Rejected zone access: {len(request.name)} name(s) for {len(request.open)} state(s), unknown zone(s) {unknown}"
             self._logger.error(response.message)
             return response
-        self._elevators.open.update(zip(request.name, (bool(o) for o in request.open), strict=True))
+        self._zones.open.update(zip(request.name, (bool(o) for o in request.open), strict=True))
         response.success = True
-        response.message = f"Set {len(request.name)} elevator door(s)"
+        response.message = f"Set access of {len(request.name)} teleport zone(s)"
         self._logger.debug(response.message)
         return response
 
@@ -3212,7 +3234,7 @@ class AgentManager(Node):
             return response
         for aid, pose in zip(ids, request.pose, strict=True):
             self._teleport_agent(aid, pose.x, pose.y, pose.theta, float(self._pool.agent_radius[self._pool.idx(aid)]))
-            self._elevators.forget(aid)
+            self._zones.forget(aid)
         response.success = True
         response.message = f"Teleported {len(ids)} agent(s)"
         self._logger.debug(response.message)

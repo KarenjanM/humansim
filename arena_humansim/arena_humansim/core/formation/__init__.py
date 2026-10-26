@@ -41,6 +41,10 @@ class Formation(Loggable, ABC):
     def arrived(self, agent_id: int) -> bool:
         return True
 
+    def faces_target(self, agent_id: int) -> bool:
+        """Whether the member turns to its target's heading now, else it faces where it walks."""
+        return True
+
     def slot_of(self, agent_id: int) -> Pose2D | None:
         """Slot the member is headed for, arrived or not, None for free-standing formations."""
         return None

@@ -6,7 +6,7 @@ import pytest
 
 pytest.importorskip("rclpy")
 
-from arena_humansim.core.agent_manager import PRONE_RADIUS, AgentManager
+from arena_humansim.core.agent_manager import PRONE_RADIUS, SEAT_RISE_S, AgentManager
 from arena_humansim.utils.scenario import ModuleConfig, ScenarioConfig, SimulationParams
 from arena_humansim.core.interaction_kinds import InteractionType
 from arena_humansim.core.world_knowledge import WorldObject
@@ -46,7 +46,7 @@ def test_prone_posture_widens_the_footprint_and_restores(manager_factory: Callab
 
 
 def test_released_seat_returns_the_agent_to_where_it_walked_up(manager_factory: Callable[..., AgentManager]) -> None:
-    """The seat is inside the furniture's collision box, so a released agent must not be left standing on it."""
+    """A released agent goes back to where it walked up from and stays there while it gets up."""
     scenario = ScenarioConfig(name="unpark", simulation=SimulationParams(seed=1, dt=0.05, max_ticks=0), modules=ModuleConfig())
     mgr = manager_factory(scenario, node_name="test_unpark")
     seat = Pose2D(x=0.0, y=0.0, theta=1.0)
@@ -78,3 +78,12 @@ def test_released_seat_returns_the_agent_to_where_it_walked_up(manager_factory: 
     mgr._park_seated(pool)
     assert (pool.pos[idx, 0], pool.pos[idx, 1]) == pytest.approx((0.6, 0.0))
     assert aid not in mgr._parked_from
+
+    pool.pos[idx] = (1.0, 0.0)
+    mgr._tick_count += round(SEAT_RISE_S / 0.05)
+    mgr._park_seated(pool)
+    assert (pool.pos[idx, 0], pool.pos[idx, 1]) == pytest.approx((0.6, 0.0))
+    pool.pos[idx] = (1.0, 0.0)
+    mgr._tick_count += 1
+    mgr._park_seated(pool)
+    assert (pool.pos[idx, 0], pool.pos[idx, 1]) == pytest.approx((1.0, 0.0))

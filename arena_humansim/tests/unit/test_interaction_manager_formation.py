@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+
 from dataclasses import dataclass, field
 
 import pytest
@@ -314,6 +316,20 @@ def test_seated_agent_parks_on_its_seat_from_reach() -> None:
     assert mgr.parked() == {}
     agents[1].state.pose = Pose2D(x=5.0, y=-0.7)
     assert mgr.parked() == {1: seat}
+
+
+@pytest.mark.parametrize(("itype", "target"), [(InteractionType.SIT_ON, Pose2D(x=5.0, y=-0.5, theta=-math.pi / 2)), (InteractionType.LIE_ON, Pose2D(x=5.0, y=0.0, theta=-math.pi / 2))])
+def test_only_a_sitter_walks_to_the_seats_standing_point(itype: InteractionType, target: Pose2D) -> None:
+    wk = WorldKnowledge()
+    seat = Pose2D(x=5.0, y=0.0, theta=-math.pi / 2)
+    wk.add_object(WorldObject(object_id="bed", type="bed", pose=Pose2D(x=5.0, y=0.0, theta=0.0), seats=[seat], seat_approach=[0.5]))
+    agents = {1: _FakeAgent(state=_FakeState(agent_id=1, pose=Pose2D(x=5.0, y=-2.0)))}
+    mgr = _mk_manager(agents, world=wk)
+    iid = _create(mgr, 1, itype, target="bed")
+    mgr.interactions[iid].outcome = InteractionOutcome.ACTIVE
+    _, formation_targets, _ = mgr.update({}, dt=0.05)
+    assert formation_targets[1].x == pytest.approx(target.x)
+    assert formation_targets[1].y == pytest.approx(target.y)
 
 
 def test_stopping_an_object_releases_its_sitter_and_spares_other_objects() -> None:

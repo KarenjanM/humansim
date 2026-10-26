@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
@@ -103,3 +104,28 @@ def test_generated_slots_never_park() -> None:
     f.on_join(1)
     assert f.arrived(1)
     assert f.seat_of(1) is None
+
+
+def test_seat_with_approach_parks_once_turned_at_its_standing_point() -> None:
+    seat = Pose2D(x=5.0, y=5.0, theta=0.0)
+    poses = {1: Pose2D(x=8.0, y=5.0, theta=math.pi)}
+    f = ClusterFormation(
+        anchor=PoseAnchor(fixed=Pose2D(x=5.0, y=5.0)),
+        agent_lookup=_lookup_for(poses),
+        slot_poses=[seat],
+        slot_approach=[0.5],
+    )
+    f.on_join(1)
+    assert f.tick(dt=0.01)[1] == Pose2D(x=5.5, y=5.0, theta=0.0)
+    assert not f.faces_target(1)
+    poses[1] = Pose2D(x=5.6, y=5.1, theta=math.pi)
+    assert f.faces_target(1)
+    assert not f.arrived(1)
+    poses[1] = Pose2D(x=5.6, y=5.1, theta=0.05)
+    assert f.seat_of(1) == seat
+    poses[1] = seat
+    assert f.arrived(1)
+    f.on_leave(1)
+    poses[1] = Pose2D(x=5.6, y=5.1, theta=math.pi)
+    f.on_join(1)
+    assert not f.arrived(1)

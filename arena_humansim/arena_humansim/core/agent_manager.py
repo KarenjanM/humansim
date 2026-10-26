@@ -300,6 +300,7 @@ def arrival_damp_step(pool: AgentPool, dt: float, tau_brake: float) -> None:
 
 
 PRONE_RADIUS = 0.9  # half a body length, the disc a lying agent occupies
+SEAT_RISE_S = 1.5  # s, a released agent stays where it stood while its body gets up
 
 
 def _gesture_msg(intent: GestureIntent) -> GestureMsg:
@@ -528,6 +529,7 @@ class AgentManager(Node):
         self._zones = TeleportZones()
         self._prone: set[int] = set()
         self._parked_from: dict[int, tuple[float, float, float]] = {}
+        self._rising: dict[int, tuple[float, float, float, int]] = {}
         self._marker_pub = MarkerPublisher(self) if self._publish_markers > 0 else None
         self._tick_count: int = 0
         self._sim_time_ns: int = 0
@@ -1406,6 +1408,7 @@ class AgentManager(Node):
         self._agents.pop(aid, None)
         self._prone.discard(aid)
         self._parked_from.pop(aid, None)
+        self._rising.pop(aid, None)
         if aid in self._pool._id_to_idx:
             idx = self._pool._id_to_idx[aid]
             swapped_id = self._pool.swap_remove(aid)
@@ -1698,7 +1701,7 @@ class AgentManager(Node):
             idx = pool.idx(aid)
             self._teleport_agent(aid, x, y, float(pool.theta[idx]), float(pool.agent_radius[idx]))
             self._zones.forget(aid)
-        heading_goals = {aid: pose.theta for aid, pose in formation_targets.items()}
+        heading_goals = dict(self._interaction_manager.formation_headings())
         for aid, agent in self._agents.items():
             if aid in heading_goals:
                 continue
@@ -2365,7 +2368,7 @@ class AgentManager(Node):
             pool.prev_vel[idx] = pool.vel[idx]
 
     def _park_seated(self, pool: AgentPool) -> None:
-        """Seated agents stay on their seat: furniture geometry and planning forces do not move them."""
+        """Seated agents stay on their seat, furniture geometry and planning forces do not move them, and a released one stays where it stood for SEAT_RISE_S."""
         parked = self._interaction_manager.parked()
         for aid, seat in parked.items():
             idx = pool._id_to_idx.get(aid)
@@ -2381,8 +2384,12 @@ class AgentManager(Node):
 
         for aid in [aid for aid in self._parked_from if aid not in parked]:
             x, y, theta = self._parked_from.pop(aid)
+            self._rising[aid] = (x, y, theta, self._tick_count + round(SEAT_RISE_S / self._dt))
+
+        for aid, (x, y, theta, until) in list(self._rising.items()):
             idx = pool._id_to_idx.get(aid)
-            if idx is None:
+            if idx is None or aid in parked or self._tick_count > until:
+                del self._rising[aid]
                 continue
             # released: the seat sits inside the object's collision box, which the resolver cannot push out of
             pool.pos[idx, 0] = x
@@ -2806,6 +2813,7 @@ class AgentManager(Node):
             self._external_entities.clear()
             self._prone.clear()
             self._parked_from.clear()
+            self._rising.clear()
             self._despawn_monitor.clear()
             self._spawn_scheduler.reset_counts()
             self._interaction_manager.reset()
@@ -2854,6 +2862,7 @@ class AgentManager(Node):
         self._external_entities.clear()
         self._prone.clear()
         self._parked_from.clear()
+        self._rising.clear()
         self._despawn_monitor.clear()
         self._spawn_scheduler.reset_counts()
         self._spawn_scheduler.clear_sources()
@@ -3327,6 +3336,10 @@ class AgentManager(Node):
             except ValueError as e:
                 self._logger.warning(f"{e}, keeping its seats without conflicts")
                 seat_conflicts = []
+            seat_approach = [float(a) for a in info.seat_approach]
+            if seat_approach and len(seat_approach) != len(info.seats):
+                self._logger.warning(f"world object {info.object_id!r}: seat_approach needs {len(info.seats)} values, got {len(seat_approach)}, its sitters arrive from reach")
+                seat_approach = []
             satisfies = {k: float(v) for k, v in zip(info.satisfies_keys, info.satisfies_values, strict=True)}
             interaction_radius = float(info.interaction_radius) if info.interaction_radius > 0.0 else None
             formation: FormationSpec | None = None
@@ -3343,6 +3356,7 @@ class AgentManager(Node):
                     interaction_radius=interaction_radius,
                     formation=formation,
                     seats=[Pose2D(x=float(s.x), y=float(s.y), theta=float(s.theta)) for s in info.seats],
+                    seat_approach=seat_approach,
                     seat_conflicts=seat_conflicts,
                 )
             )

@@ -168,6 +168,7 @@ class InteractionManager(Loggable):
         self._formation_scale = formation_scale
         self._cohesion_multiplier = cohesion_multiplier
         self._formation_targets: dict[int, Pose2D] = {}
+        self._formation_headings: dict[int, float] = {}
         self._formation_speeds: dict[int, float] = {}
         self._formation_dt = 0.0
         self._clearance: Clearance | None = None
@@ -274,6 +275,7 @@ class InteractionManager(Loggable):
         self._interaction_by_object_type.clear()
         self._interactions_by_type.clear()
         self._formation_targets.clear()
+        self._formation_headings.clear()
         self._formation_speeds.clear()
         self._formation_dt = 0.0
         self._current_departed.clear()
@@ -417,6 +419,7 @@ class InteractionManager(Loggable):
             return
         formation.on_leave(agent_id)
         self._formation_targets.pop(agent_id, None)
+        self._formation_headings.pop(agent_id, None)
         self._formation_speeds.pop(agent_id, None)
 
     def stop(
@@ -560,6 +563,7 @@ class InteractionManager(Loggable):
 
     def _tick_formations(self, dt: float) -> dict[int, Pose2D]:
         targets: dict[int, Pose2D] = {}
+        headings: dict[int, float] = {}
         speeds: dict[int, float] = {}
         by_type: dict[type[Formation], list[Formation]] = {}
         for interaction in self.interactions.values():
@@ -571,6 +575,8 @@ class InteractionManager(Loggable):
                 speeds.update(formation.speeds())
                 for aid, pose in per_formation.items():
                     targets[aid] = pose
+                    if formation.faces_target(aid):
+                        headings[aid] = pose.theta
                     agent = self._agent_lookup(aid)
                     if agent is None or not isinstance(agent.movement, BehaviorTreeMovement):
                         continue
@@ -581,11 +587,16 @@ class InteractionManager(Loggable):
                         desired_velocity=agent.state.desired_velocity,
                     )
         self._formation_targets = targets
+        self._formation_headings = headings
         self._formation_speeds = speeds
         return targets
 
     def formation_target(self, agent_id: int) -> Pose2D | None:
         return self._formation_targets.get(agent_id)
+
+    def formation_headings(self) -> dict[int, float]:
+        """Heading each formation member turns to, members walking to a seat's standing point face where they walk."""
+        return self._formation_headings
 
     def formation_speeds(self) -> dict[int, float]:
         return self._formation_speeds
@@ -1024,6 +1035,8 @@ class InteractionManager(Loggable):
             obj = self._world_knowledge.get(seat_object)
             assert obj is not None
             params["slot_poses"] = list(obj.seats)
+            if InteractionType(interaction.type).kind.posture == "seated":
+                params["slot_approach"] = list(obj.seat_approach) or None
             params["admissible"] = self._seat_admissible(seat_object)
         try:
             formation = Formation.create(

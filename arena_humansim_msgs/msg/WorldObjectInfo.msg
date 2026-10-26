@@ -13,5 +13,6 @@ float64[] formation_param_values
 
 # Seat poses (world frame): cluster formations on this object place participants exactly here. Empty = ring around the pose.
 geometry_msgs/Pose2D[] seats
+float64[] seat_approach        # stand point, m ahead of seat i, empty = none
 uint32[] seat_conflict_offset  # n+1 offsets into seat_conflicts, empty = none
 uint32[] seat_conflicts        # seats that cannot be held together with seat i

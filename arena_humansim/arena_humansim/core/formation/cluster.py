@@ -8,6 +8,8 @@ import attrs
 from arena_humansim.utils import DISTANCE_TOLERANCE
 
 SEAT_REACH = 0.9  # explicit seats sit inside furniture that keeps walkers out, arrival is declared from here and the agent is parked on the slot
+STAND_REACH = 0.4  # m, from the standing point before a seat, where the agent turns to the seat's heading
+STAND_TURN = math.radians(10.0)  # rad, heading error below which the agent is parked
 from arena_humansim.utils.types import Pose2D, pose_distance
 
 from . import AgentLookup, Formation
@@ -19,6 +21,12 @@ class _Slot:
     pose: Pose2D
     agent_id: int | None = None
     seat: int = -1
+    approach: float = 0.0
+    seated: bool = False
+
+    def stand(self) -> Pose2D:
+        """Where a sitter stands, facing the seat's heading, before it is parked on the seat."""
+        return Pose2D(x=self.pose.x + self.approach * math.cos(self.pose.theta), y=self.pose.y + self.approach * math.sin(self.pose.theta), theta=self.pose.theta)
 
 
 class ClusterFormation(Formation):
@@ -33,6 +41,7 @@ class ClusterFormation(Formation):
         anchor: Anchor,
         agent_lookup: AgentLookup,
         slot_poses: list[Pose2D] | None = None,
+        slot_approach: list[float] | None = None,
         radius: float = 1.2,
         capacity: int = 8,
         formation_scale: float = 1.0,
@@ -44,7 +53,8 @@ class ClusterFormation(Formation):
         self._admissible = admissible
         self._waiting: list[int] = []
         if slot_poses is not None:
-            self._slots = [_Slot(pose=p, seat=i) for i, p in enumerate(slot_poses)]
+            approach = slot_approach or [0.0] * len(slot_poses)
+            self._slots = [_Slot(pose=p, seat=i, approach=a) for i, (p, a) in enumerate(zip(slot_poses, approach, strict=True))]
             self._generated = False
         else:
             self._slots = self._generate_slots(anchor.pose(), radius * formation_scale, capacity)
@@ -77,6 +87,7 @@ class ClusterFormation(Formation):
         agent = self.agent_lookup(agent_id)
         best = free[0] if agent is None else min(free, key=lambda s: pose_distance(s.pose, agent.state.pose))
         best.agent_id = agent_id
+        best.seated = False
         return True
 
     def on_leave(self, agent_id: int) -> None:
@@ -86,6 +97,7 @@ class ClusterFormation(Formation):
         for s in self._slots:
             if s.agent_id == agent_id:
                 s.agent_id = None
+                s.seated = False
                 return
 
     def tick(self, dt: float) -> dict[int, Pose2D]:
@@ -102,7 +114,7 @@ class ClusterFormation(Formation):
         for agent_id in list(self._waiting):
             if self._assign(agent_id):
                 self._waiting.remove(agent_id)
-        return {s.agent_id: s.pose for s in self._slots if s.agent_id is not None}
+        return {s.agent_id: s.stand() if s.approach > 0.0 else s.pose for s in self._slots if s.agent_id is not None}
 
     def arrived(self, agent_id: int) -> bool:
         slot = next((s for s in self._slots if s.agent_id == agent_id), None)
@@ -111,8 +123,20 @@ class ClusterFormation(Formation):
         agent = self.agent_lookup(agent_id)
         if agent is None:
             return True
+        if slot.approach > 0.0:
+            stand = slot.stand()
+            turn = abs(math.remainder(agent.state.pose.theta - stand.theta, math.tau))
+            slot.seated = slot.seated or (pose_distance(agent.state.pose, stand) < STAND_REACH and turn < STAND_TURN)
+            return slot.seated
         reach = DISTANCE_TOLERANCE if self._generated else SEAT_REACH
         return pose_distance(agent.state.pose, slot.pose) < reach
+
+    def faces_target(self, agent_id: int) -> bool:
+        slot = next((s for s in self._slots if s.agent_id == agent_id), None)
+        if slot is None or slot.approach <= 0.0 or slot.seated:
+            return True
+        agent = self.agent_lookup(agent_id)
+        return agent is None or pose_distance(agent.state.pose, slot.stand()) < STAND_REACH
 
     def slot_of(self, agent_id: int) -> Pose2D | None:
         slot = next((s for s in self._slots if s.agent_id == agent_id), None)

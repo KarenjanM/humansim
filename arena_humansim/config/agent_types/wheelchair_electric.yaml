@@ -1,0 +1,35 @@
+# Illustrative indoor powered chair, not an empirically calibrated profile.
+# Extend adult directly: wheelchair_manual deep-merges cyclic arm-stroke signals.
+name: wheelchair_electric
+extends: adult
+interaction_class: wheelchair
+assets: [human::propulsion::electric]
+
+agent_radius: 0.325
+desired_velocity: 0.9
+max_velocity: 1.2
+max_acceleration: 0.6
+max_deceleration: 1.0
+min_turning_radius: 0.05
+pivot_angular_velocity: 1.0
+
+local_planner: hsfm
+local_planner_params:
+  lateral_gain: 0.0
+  heading_source: total
+
+locomotion:
+  kinematics: along_heading
+  speed_profile: {harmonics: []}
+  lateral_profile: {harmonics: []}
+  footprint_length: 1.1
+  recovery: {stall_after_s: 3.0, reverse_m: 0.3}
+
+pose:
+  walk: &held_pose
+    # Use the same held pose as arena_humans mobility wheelchair_electric.
+    base: seated_wheelchair_electric
+  idle: *held_pose
+  run:
+    same_as: walk
+    gain: {factor: 1.0}

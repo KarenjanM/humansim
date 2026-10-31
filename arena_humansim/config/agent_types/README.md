@@ -42,11 +42,11 @@ Declaring the block at all (even empty) activates the locomotion profile for the
 
 The zero-means-off fields (`footprint_length`, `recovery.*`) take a bare number for `0`, since the dict form's `clip_low` default of `0.01` would lift a `{mean: 0}` to `0.01`.
 
-Pose (`pose:`, optional): passed through untouched to the renderer (task_generator's human animation), humansim never reads it. Per-state (`walk`, `idle`, `run`) joint profiles keyed to the published gait phase, see the renderer's profile docs.
+Pose (`pose:`, optional): passed through untouched to the renderer (arena_runtime's human animation), humansim never reads it. Per-state (`walk`, `idle`, `run`) joint profiles keyed to the published gait phase, see the renderer's profile docs.
 
 Interaction class (`interaction_class:`, optional name string): social-force class of the type for the local planners' per-class gain matrices. Unset = `human`, robots are always `robot`, any other word (e.g. `wheelchair`) registers a new class on first sight, see [../../arena_humansim/core/interaction_classes.py](../../arena_humansim/core/interaction_classes.py).
 
-Assets (`assets:`, optional list of ASA tags): tag query that selects the visual model of a source-spawned agent, e.g. `human::mobility::wheelchair`. Passed through to the renderer (task_generator), humansim never reads it.
+Assets (`assets:`, optional list of ASA tags): tag query that selects the visual model of a source-spawned agent, e.g. `human::mobility::wheelchair`. Passed through to the renderer (the env node), humansim never reads it.
 
 Climbs (`climbs:`, optional list among `stairs` and `escalator`, default both): the teleport zone stair kinds the type is routed over, see the [teleport zones](../../../README.md#stairs) section. A pedestrian whose type does not climb a kind takes a route over cabins and other stairs, or stays on its level when none exists. `wheelchair_manual` climbs `[]`. Any other word rejects the type.
 
@@ -69,7 +69,7 @@ desired_velocity: {mean: 0.5, std: 0.08, clip_low: 0.2, clip_high: 0.8}
 
 `extends:` pulls in the parent's full field set, then this file's fields override. Nested structures (`perception`, `local_planner_params`) merge field-by-field, not as whole replacements, and `locomotion` / `pose` merge recursively (a child's `cadence: {max: 1.2}` keeps the parent's other cadence fields). Inheritance chains resolve in the loader, see [../../arena_humansim/core/agents/loader.py](../../arena_humansim/core/agents/loader.py) (`resolve_extends`).
 
-When a scenario references a type by path (`agent_type: ./doctor.yaml`, the normal case for a `dynamic:` entry - see [task_generator human README](../../../../task_generator/task_generator/simulators/human/README.md)), that single file is loaded on its own and `extends:` can only reach the types shipped here (`adult`, `elder`, `child`, `hurried`, `distracted`, `robot`) - it cannot reach a sibling file in the same scenario's directory. Extending another scenario-local type only works when the whole directory is loaded together (e.g. by tooling that calls `load_agent_types(scenario_dir)`).
+When a scenario references a type by path (`agent_type: ./doctor.yaml`, the normal case for a `dynamic:` entry - see [arena_runtime human README](../../../../arena_runtime/arena_runtime/arena_runtime/humans/README.md)), that single file is loaded on its own and `extends:` can only reach the types shipped here (`adult`, `elder`, `child`, `hurried`, `distracted`, `robot`) - it cannot reach a sibling file in the same scenario's directory. Extending another scenario-local type only works when the whole directory is loaded together (e.g. by tooling that calls `load_agent_types(scenario_dir)`).
 
 ## Behavior trees
 
@@ -266,7 +266,7 @@ Per-agent trees are built in [../../arena_humansim/core/behavior/compiler.py](..
 
 ## Where this gets sampled
 
-For a `dynamic:` scenario entry, `ArenaHumanDynamicObstacle.sample_params` (in [task_generator's arena_humansim adapter](../../../../task_generator/task_generator/simulators/human/arena_humansim/__init__.py)) resolves `agent_type` to an `AgentType` - `load_agent_type_from_file` for a path, `BUILTIN_AGENTS[name]` for a builtin - then calls `sample_agent_type(agent_type, rng)`. The RNG is the agent's seeded substream, so the same seed + type + agent_id gives the same sampled instance across runs. See [task_generator human README](../../../../task_generator/task_generator/simulators/human/README.md) for the full `agent:` block schema.
+For a `dynamic:` scenario entry, `ArenaHumanDynamicObstacle.sample_params` (in [arena_runtime's arena_humansim adapter](../../../../arena_runtime/arena_runtime/arena_runtime/humans/arena_humansim/__init__.py)) resolves `agent_type` to an `AgentType` - `load_agent_type_from_file` for a path, `BUILTIN_AGENTS[name]` for a builtin - then calls `sample_agent_type(agent_type, rng)`. The RNG is the agent's seeded substream, so the same seed + type + agent_id gives the same sampled instance across runs. See [arena_runtime human README](../../../../arena_runtime/arena_runtime/arena_runtime/humans/README.md) for the full `agent:` block schema.
 
 ## `vars` (scenario-embedded types only)
 

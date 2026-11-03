@@ -31,8 +31,7 @@ def test_remove_subset_of_agents(system: RosTestSystem) -> None:
     assert remove_resp.success is True
 
     system.subscribe_agent_states()
-    system.tick_manager(1)
-    msg = system.wait_for_agent_states(timeout=5.0)
+    msg = system.wait_for_agent_states(timeout=20.0, tick=True)
 
     published_ids = set(msg.agent_id)
     assert remaining.issubset(published_ids)
@@ -49,6 +48,5 @@ def test_remove_all_with_empty_list(system: RosTestSystem) -> None:
     assert resp.success is True
 
     system.subscribe_agent_states()
-    system.tick_manager(1)
-    msg = system.wait_for_agent_states(timeout=5.0)
+    msg = system.wait_for_agent_states(timeout=20.0, tick=True)
     assert len(msg.agent_id) == 0

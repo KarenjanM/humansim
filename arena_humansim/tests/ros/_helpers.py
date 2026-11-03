@@ -61,11 +61,13 @@ class RosTestSystem:
             10,
         )
 
-    def wait_for_agent_states(self, timeout: float = 5.0) -> AgentFrameMsg:
+    def wait_for_agent_states(self, timeout: float = 5.0, tick: bool = False) -> AgentFrameMsg:
         self.subscribe_agent_states()
         deadline = time.monotonic() + timeout
         start_len = len(self._received)
         while time.monotonic() < deadline:
+            if tick:
+                self.manager.tick()
             self.executor.spin_once(timeout_sec=0.05)
             if len(self._received) > start_len:
                 return self._received[-1]

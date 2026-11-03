@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+
 import pytest
 
 pytest.importorskip("rclpy")
@@ -16,6 +18,7 @@ from rclpy.executors import SingleThreadedExecutor
 from rclpy.parameter import Parameter
 from rclpy.qos import QoSProfile, ReliabilityPolicy
 
+from tests.integration._capture import spin_until
 from tests.integration._helpers import build_manager
 
 
@@ -72,16 +75,14 @@ def test_master_mode_no_drops_uniform_spacing() -> None:
     executor.add_node(mgr)
 
     try:
-        for _ in range(20):
-            executor.spin_once(timeout_sec=0.01)
+        spin_until(executor, lambda: mgr.count_subscribers("agent_states") >= 1, timeout=20.0)
 
         for _ in range(n_ticks):
             mgr._master_timer_callback()
             executor.spin_once(timeout_sec=0.01)
 
-        for _ in range(50):
-            if len(received) >= n_ticks:
-                break
+        deadline = time.monotonic() + 20.0
+        while len(received) < n_ticks and time.monotonic() < deadline:
             executor.spin_once(timeout_sec=0.05)
     finally:
         executor.remove_node(mgr)

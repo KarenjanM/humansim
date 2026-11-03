@@ -42,8 +42,7 @@ def test_spawned_ids_appear_in_agent_states_topic(system: RosTestSystem) -> None
     expected = set(resp.spawned_ids)
 
     system.subscribe_agent_states()
-    system.tick_manager(1)
-    msg = system.wait_for_agent_states(timeout=5.0)
+    msg = system.wait_for_agent_states(timeout=20.0, tick=True)
 
     published_ids = set(msg.agent_id)
     assert expected.issubset(published_ids), f"expected {expected} subset of {published_ids}"

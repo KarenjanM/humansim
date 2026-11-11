@@ -311,6 +311,7 @@ def _gesture_msg(intent: GestureIntent) -> GestureMsg:
     g.clip = intent.clip
     g.hand = intent.hand
     g.render_pose_override = intent.render_pose_override
+    g.grip = intent.grip
     return g
 
 

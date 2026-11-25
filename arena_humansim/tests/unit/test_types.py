@@ -4,9 +4,20 @@ import math
 
 import attrs
 import pytest
-
 from arena_humansim.core.agents.types import SampledParams, SampledPerception
-from arena_humansim.utils.types import AgentState, Pose2D
+from arena_humansim.utils.types import AgentState, GestureIntent, Pose2D
+
+
+@pytest.mark.parametrize("grip", [0.0, 0.4, 1.0])
+def test_gesture_intent_accepts_partial_closure(grip: float) -> None:
+    assert GestureIntent("receive_r", grip=grip).grip == grip
+    assert GestureIntent("receive_r").grip == 0.0
+
+
+@pytest.mark.parametrize("grip", [-0.1, 1.1, float("nan"), float("inf"), -float("inf")])
+def test_gesture_intent_rejects_invalid_closure(grip: float) -> None:
+    with pytest.raises(ValueError, match="grip must be between"):
+        GestureIntent("receive_r", grip=grip)
 
 
 def test_pose2d_default_finite() -> None:

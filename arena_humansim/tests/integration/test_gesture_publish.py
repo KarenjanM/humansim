@@ -54,7 +54,7 @@ def test_meta_and_gestures_carry_name_handedness_and_gestures(manager_factory: C
     assert mgr._agents[ped].params.handedness in ("l", "r")
     assert mgr._agents[lefty].params.handedness == "l"
 
-    mv = BehaviorTreeMovement(gestures=(GestureIntent("arm", 1.0, 2.0, 3.0, hand="l"), GestureIntent("head", 4.0, 5.0, 6.0)))
+    mv = BehaviorTreeMovement(gestures=(GestureIntent("arm", 1.0, 2.0, 3.0, hand="l"), GestureIntent("head", 4.0, 5.0, 6.0), GestureIntent("receive_r", 2.0, 0.0, 1.2, grip=0.4)))
     mgr._agents[ped].movement = mv
 
     mgr.tick()
@@ -70,13 +70,15 @@ def test_meta_and_gestures_carry_name_handedness_and_gestures(manager_factory: C
     assert names[bot] == "bot"
     assert names[lefty] == ""
     assert hands[lefty] == "l"
-    assert list(gestures[-1].agent_id) == [ped, ped]
-    assert [g.slot for g in gestures[-1].gestures] == ["arm", "head"]
-    arm, head = gestures[-1].gestures
+    assert list(gestures[-1].agent_id) == [ped, ped, ped]
+    assert [g.slot for g in gestures[-1].gestures] == ["arm", "head", "receive_r"]
+    arm, head, receive = gestures[-1].gestures
     assert (arm.at.x, arm.at.y, arm.at.z) == (1.0, 2.0, 3.0)
     assert arm.hand == "l"
     assert (head.at.x, head.at.y, head.at.z) == (4.0, 5.0, 6.0)
     assert head.hand == "" and head.clip == ""
+    assert arm.grip == head.grip == 0.0
+    assert receive.grip == pytest.approx(0.4)
 
     mv.gestures = ()
     while mgr._tick_count % mgr._bt_tick_interval != 0:

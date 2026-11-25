@@ -256,7 +256,11 @@ class GestureIntent:
     clip: str = ""  # body slot: animation clip name
     hand: str = ""  # arm slot: dominant hand l | r, empty = default
     render_pose_override: bool = False  # body slot: (x, y) is a render-only position override
-    grip: bool = False  # receive: close the selected hand
+    grip: float = attrs.field(default=0.0, converter=float)  # receive: closure from open (0) to GRIP (1)
+
+    def __attrs_post_init__(self) -> None:
+        if not 0.0 <= self.grip <= 1.0:
+            raise ValueError("grip must be between 0.0 and 1.0")
 
 
 @attrs.define
